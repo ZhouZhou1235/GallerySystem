@@ -60,6 +60,7 @@ const config = {
     FILE_fileHub: {
         root: workPath+'/files',
         gallery: workPath+'/files/gallery/',
+        galleryPreview: workPath+'/files/GalleryPreview/',
         garden: workPath+'/files/garden/',
     },
     FILE_staticURL: workPath+'/static',

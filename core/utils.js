@@ -2,6 +2,9 @@
 
 import bcrypt from "bcryptjs";
 import { Board, Gallery, Garden, tableName, Tag, TagGallery, TagGarden, User } from "./database/models.js";
+import sharp from "sharp";
+import fs from 'fs';
+import config  from "../config.js";
 
 
 // === 通用
@@ -40,6 +43,11 @@ export function isEqualObj(obj1={},obj2={}){
     return true;
 }
 
+// 压缩图片
+export function compressImage(filepath,savepath,resizeNum=500){
+    sharp(filepath).resize(resizeNum).toFile(savepath)
+}
+
 
 // === 业务
 
@@ -54,5 +62,15 @@ export function getDBRecordCount(table=''){
         case tableName.tag_garden: return TagGarden.count();
         case tableName.user: return User.count();
         default: return 0;
+    }
+}
+
+// 创建文件库目录
+export function createFilesDir(){
+    let filehub = config.FILE_fileHub;
+    let keys = Object.keys(filehub);
+    for(let i=0;i<keys.length;i++){
+        let path = filehub[keys[i]];
+        if(!fs.existsSync(path)){fs.mkdirSync(path);}
     }
 }

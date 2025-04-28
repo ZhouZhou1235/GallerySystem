@@ -2,7 +2,7 @@
 
 import express from 'express';
 import { Board, Gallery, Garden, Tag, TagGallery, TagGarden, User } from './database/models.js';
-import { checkObjComplete, comparePasswordHash, createPasswordHash, getDBRecordCount, getExtension, isEqualObj } from './utils.js';
+import { checkObjComplete, comparePasswordHash, compressImage, createPasswordHash, getDBRecordCount, getExtension, isEqualObj } from './utils.js';
 import config from '../config.js';
 import sqllize from './database/orm_sequelize.js';
 import { sendAMail } from './mailer.js';
@@ -170,7 +170,8 @@ export function loadMachineController(machine=express()){
                 }
             });
             if(result){
-                file.mv(savepath);
+                await file.mv(savepath);
+                if(ext!='gif'||ext!='GIF'){compressImage(savepath,config.FILE_fileHub.galleryPreview+saveFilename);}
                 res.send(1);
             }
         }
