@@ -6,6 +6,7 @@ import { checkObjComplete, comparePasswordHash, compressImage, createPasswordHas
 import config from '../config.js';
 import sqllize from './database/orm_sequelize.js';
 import { sendAMail } from './mailer.js';
+import fs from 'fs';
 
 const routeTable = config.CONTROL_routeTable;
 
@@ -18,7 +19,24 @@ export function loadMachineController(machine=express()){
         let filename = req.params.filename;
         if(!filename){res.send(0);return;}
         let fileurl = config.FILE_fileHub.gallery+filename;
-        console.log(fileurl);
+        res.sendFile(fileurl);
+    });
+    machine.get(routeTable.files_headimage,(req,res)=>{
+        let filename = req.params.filename;
+        if(!filename){res.send(0);return;}
+        let fileurl = config.FILE_fileHub.headimage+filename;
+        res.sendFile(fileurl);
+    });
+    machine.get(routeTable.files_backimage,(req,res)=>{
+        let filename = req.params.filename;
+        if(!filename){res.send(0);return;}
+        let fileurl = config.FILE_fileHub.backimage+filename;
+        res.sendFile(fileurl);
+    });
+    machine.get(routeTable.files_galleryPreview,(req,res)=>{
+        let filename = req.params.filename;
+        if(!filename){res.send(0);return;}
+        let fileurl = config.FILE_fileHub.galleryPreview+filename;
         res.sendFile(fileurl);
     });
     // GET
@@ -348,5 +366,145 @@ export function loadMachineController(machine=express()){
             });
         }
         catch(e){console.log(e);res.send(0);}
+    });
+    machine.post(routeTable.editUser,(req,res)=>{ // 修改用户信息
+        let editUserForm = req.body;
+        let name = editUserForm.name;
+        let info = editUserForm.info;
+        let sex = editUserForm.sex;
+        let species = editUserForm.species;
+        let username = req.session.username;
+        if(!name || !username){res.send(0);return;}
+        try{
+            sqllize.transaction(async t=>{
+                await User.update(
+                    {
+                        name: name,
+                        info: info,
+                        sex: sex,
+                        species: species,
+                    },
+                    {where:{username:username}},
+                    { transaction:t },
+                );
+                res.send(1);
+            });
+        }
+        catch(e){console.log(e);}
+    });
+    machine.post(routeTable.editUserImage,(req,res)=>{ // 修改用户图片
+        let headimage = req.files?.headimage;
+        let backimage = req.files?.backimage;
+        let username = req.session.username;
+        if(!username){res.send(0);return;}
+        if(!headimage && !backimage){res.send(0);return;}
+        if(headimage){
+            let id = Math.floor(Math.pow(10,10)*Math.random());
+            let ext = getExtension(headimage.name);
+            if(!ext in config.FILE_imageAllowExtension){res.send(0);return;}
+            let saveFilename = id+'.'+ext;
+            let saveTmpFilename = id+'tmp'+'.'+ext;
+            let savepath = config.FILE_fileHub.headimage+saveFilename;
+            let tmpSavepath = config.FILE_fileHub.headimage+saveTmpFilename;
+            try{
+                sqllize.transaction(async t=>{
+                    let oldFilename;
+                    await User.findOne({where:{username:username}}).then(data=>{oldFilename = data.headimage;});
+                    await User.update(
+                        {headimage:saveFilename,},
+                        {where:{username:username}},
+                        { transaction:t },
+                    );
+                    await headimage.mv(tmpSavepath);
+                    await compressImage(tmpSavepath,savepath);
+                    fs.unlinkSync(tmpSavepath);
+                    if(oldFilename){fs.unlinkSync(config.FILE_fileHub.headimage+oldFilename);}
+                });
+            }
+            catch(e){console.log(e);}
+        }
+        if(backimage){
+            let id = Math.floor(Math.pow(10,10)*Math.random());
+            let ext = getExtension(backimage.name);
+            if(!ext in config.FILE_imageAllowExtension){res.send(0);return;}
+            let saveFilename = id+'.'+ext;
+            let saveTmpFilename = id+'tmp'+'.'+ext;
+            let savepath = config.FILE_fileHub.backimage+saveFilename;
+            let tmpSavepath = config.FILE_fileHub.backimage+saveTmpFilename;
+            try{
+                sqllize.transaction(async t=>{
+                    let oldFilename;
+                    await User.findOne({where:{username:username}}).then(data=>{oldFilename=data.backimage;});
+                    await User.update(
+                        {backimage:saveFilename,},
+                        {where:{username:username}},
+                        { transaction:t },
+                    );
+                    await backimage.mv(tmpSavepath)
+                    await compressImage(tmpSavepath,savepath,config.FILE_imageResizeNum*4);
+                    fs.unlinkSync(tmpSavepath);
+                    if(oldFilename){fs.unlinkSync(config.FILE_fileHub.backimage+oldFilename);}
+                });
+            }
+            catch(e){console.log(e);}
+        }
+        res.send(1);
+    });
+    machine.post(routeTable.getEditUserImportantCode,(req,res)=>{ // 获取用户关键信息验证码
+        let editUserImportantForm = req.body;
+        let email = editUserImportantForm.email;
+        let username = req.session.username;
+        if(!username){res.send(0);return;}
+        (async()=>{
+            if(!email){
+                await User.findOne({where:{username:username}}).then(data=>{
+                    email = data.email;
+                });
+            }
+            let code = Math.floor(Math.pow(10,6)*Math.random());
+            let content = `
+                <h1>修改粉糖账号 ${ username } 的关键内容</h1>
+                <p>验证码：${ code }</p>
+            `
+            req.session['editUserImportantCode'] = code;
+            req.session.cookie.maxAge = config.SESSION_effectiveTime;
+            sendAMail(email,content);
+            res.send(1);
+        })()
+    });
+    machine.post(routeTable.editUserImportant,(req,res)=>{ // 修改用户关键信息
+        let editUserImportantForm = req.body;
+        let password = editUserImportantForm.password;
+        let email = editUserImportantForm.email;
+        let code = editUserImportantForm.code;
+        let username = req.session.username;
+        if(!username || code!=req.session['editUserImportantCode']){res.send(0);return;}
+        if(password){
+            try{
+                let passwordhash = createPasswordHash(password);
+                sqllize.transaction(async t=>{
+                    await User.update(
+                        {password:passwordhash},
+                        {where:{username:username}},
+                        { transaction:t },
+                    );
+                });
+            }
+            catch(e){console.log(e);res.send(0);}
+        }
+        if(email){
+            try{
+                sqllize.transaction(async t=>{
+                    await User.update(
+                        {email:email},
+                        {where:{username:username}},
+                        { transaction:t },
+                    );
+                });
+            }
+            catch(e){console.log(e);res.send(0);}
+        }
+        req.session.destroy();
+        res.send(1);
     });
 }

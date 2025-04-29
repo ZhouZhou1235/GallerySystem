@@ -44,10 +44,9 @@ export function isEqualObj(obj1={},obj2={}){
 }
 
 // 压缩图片
-export function compressImage(filepath,savepath,resizeNum=500){
-    sharp(filepath).resize(resizeNum).toFile(savepath)
+export function compressImage(filepath,savepath,resizeNum=config.FILE_imageResizeNum){
+    return sharp(filepath).resize(resizeNum).toFile(savepath)
 }
-
 
 // === 业务
 

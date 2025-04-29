@@ -12,6 +12,9 @@ const config = {
     CONTROL_routeTable: { // 访问规则表
         root: '/',
         files_gallery: '/files/gallery/:filename',
+        files_headimage: '/files/headimage/:filename',
+        files_backimage: '/files/backimage/:filename',
+        files_galleryPreview: '/files/GalleryPreview/:filename',
         checkLogin: '/core/checkLogin',
         getUser: '/core/getUser/:username',
         getSessionUser: '/core/getSessionUser',
@@ -30,6 +33,10 @@ const config = {
         getTopInfo: '/core/getTopInfo',
         getDBRecordCount: '/core/getDBRecordCount',
         getArtwork: '/core/getArtwork',
+        editUser: '/core/editUser',
+        editUserImage: '/core/editUserImage',
+        getEditUserImportantCode: '/core/getEditUserImportantCode',
+        editUserImportant: '/core/editUserImportant',
     },
     // session
     SESSION_secret: 'pinkcandy gallery', // session会话密钥
@@ -62,6 +69,8 @@ const config = {
         gallery: workPath+'/files/gallery/',
         galleryPreview: workPath+'/files/GalleryPreview/',
         garden: workPath+'/files/garden/',
+        headimage: workPath+'/files/headimage/',
+        backimage: workPath+'/files/backimage/',
     },
     FILE_staticURL: workPath+'/static',
     FILE_imageAllowExtension: [
@@ -70,6 +79,7 @@ const config = {
         'tif','tiff'
     ],
     FILE_uploadLimit: '50mb',
+    FILE_imageResizeNum: 256,
     // 邮件模块
     MAILER_transport: {
         host: 'smtp.qq.com',
