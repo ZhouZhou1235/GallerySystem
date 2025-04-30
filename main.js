@@ -6,6 +6,7 @@ import { loadMachineController } from './core/controller.js';
 import session from 'express-session';
 import fileUpload from 'express-fileupload';
 import { createFilesDir } from './core/utils.js';
+import cors from 'cors';
 
 // 运行
 function run(){
@@ -21,13 +22,14 @@ function run(){
     Machine.use(express.urlencoded({
         extended:true,
         limit: config.FILE_uploadLimit,
-    }))
+    }));
     Machine.use(fileUpload({
         createParentPath: true,
         defParamCharset: config.TEXT_ENCODING,
         limits: config.FILE_uploadLimit,
-    }))
-    Machine.use(express.static(config.FILE_fileHub.root))
+    }));
+    Machine.use(express.static(config.FILE_fileHub.root));
+    Machine.use(cors(config.CORS_options));
     Machine.listen(config.LISTEN_PORT);
     loadMachineController(Machine);
     createFilesDir();

@@ -92,6 +92,14 @@ const config = {
             pass: 'auyvbrlqnjeejhjd',
         },
     },
+    // 跨域设置
+    CORS_options: {
+        origin: ['http://localhost:5173'], // 白名单
+        methods: 'GET,POST,PUT,DELETE',
+        allowedHeaders: ['Content-Type','Authorization'],
+        credentials: true, // 允许携带Cookie
+        maxAge: 86400, // 预检请求缓存时间
+    },
 };
 
 export default config;
