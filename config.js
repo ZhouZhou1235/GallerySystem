@@ -37,6 +37,7 @@ const config = {
         editUserImage: '/core/editUserImage',
         getEditUserImportantCode: '/core/getEditUserImportantCode',
         editUserImportant: '/core/editUserImportant',
+        clearUserImage: '/core/clearUserImage',
     },
     // session
     SESSION_secret: 'pinkcandy gallery', // session会话密钥

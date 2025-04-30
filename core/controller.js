@@ -507,4 +507,31 @@ export function loadMachineController(machine=express()){
         req.session.destroy();
         res.send(1);
     });
+    machine.post(routeTable.clearUserImage,(req,res)=>{ // 清除用户图片
+        let username = req.session.username;
+        if(!username){res.send(0);return;}
+        try{
+            User.findOne({where:{username:username}}).then(data=>{
+                let headimage = data.headimage;
+                let backimage = data.backimage;
+                sqllize.transaction(async t=>{
+                    await User.update(
+                        {headimage:null,backimage:null},
+                        {where:{username:username}},
+                        { transaction:t },
+                    );
+                    if(headimage){
+                        let headimagepath = config.FILE_fileHub.headimage+headimage;
+                        fs.unlinkSync(headimagepath);    
+                    }
+                    if(backimage){
+                        let backimagepath = config.FILE_fileHub.backimage+backimage;
+                        fs.unlinkSync(backimagepath);    
+                    }
+                    res.send(1);
+                });
+            });
+        }
+        catch(e){console.log(e);res.send(0);}
+    });
 }
