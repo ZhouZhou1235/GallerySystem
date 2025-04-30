@@ -111,6 +111,27 @@ export function loadMachineController(machine=express()){
             res.send(data);
         })()
     });
+    machine.get(routeTable.getTagsArtwork,(req,res)=>{ // 获取作品的标签
+        let id = req.params.id;
+        if(!id){res.send(0);return;}
+        (async()=>{
+            Tag.belongsTo(TagGallery,{foreignKey:'id',targetKey:'tagid'});
+            try{
+                let data = await Tag.findAll({
+                    order:[['type','ASC']],
+                    include: [
+                        {
+                            model: TagGallery,
+                            attributes: ['galleryid'],
+                            where:{galleryid:id},
+                        },
+                    ]
+                });
+                res.send(data);
+            }
+            catch(e){console.log(e);res.send(0);}
+        })()
+    });
     // POST
     machine.post(routeTable.checkLogin,(req,res)=>{ // 检查登录
         if(req.session.username){res.send(1);}else{res.send(0);}
@@ -166,7 +187,7 @@ export function loadMachineController(machine=express()){
                                     await Tag.create({
                                         id: tagid,
                                         tag: tagList[tag],
-                                        type: 1,
+                                        type: GArea.tagtype_info,
                                         time: Date(),
                                     },{ transaction:t });
                                     await TagGallery.create({
