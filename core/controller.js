@@ -1,14 +1,49 @@
 // 控制器
 
 import express from 'express';
-import { Board, Gallery, Garden, Tag, TagGallery, TagGarden, User } from './database/models.js';
+import { Board, Gallery, GalleryComment, Garden, Tag, TagGallery, TagGarden, User } from './database/models.js';
 import { checkObjComplete, comparePasswordHash, compressImage, createPasswordHash, getDBRecordCount, getExtension, isEqualObj } from './utils.js';
 import config from '../config.js';
 import sqllize from './database/orm_sequelize.js';
 import { sendAMail } from './mailer.js';
 import fs from 'fs';
+import { console } from 'inspector';
 
-const routeTable = config.CONTROL_routeTable;
+// 访问规则表
+const routeTable = { 
+    root: '/',
+    files_gallery: '/files/gallery/:filename',
+    files_headimage: '/files/headimage/:filename',
+    files_backimage: '/files/backimage/:filename',
+    files_galleryPreview: '/files/GalleryPreview/:filename',
+    checkLogin: '/core/checkLogin',
+    getUser: '/core/getUser/:username',
+    getSessionUser: '/core/getSessionUser',
+    login: '/core/login',
+    logout: '/core/logout',
+    uploadArtwork: '/core/uploadArtwork',
+    getArtworks: '/core/getArtworks',
+    getTags: '/core/getTags',
+    getRegisterCode: '/core/getRegisterCode',
+    register: '/core/register',
+    getResetPasswordCode: '/core/getResetPasswordCode',
+    resetPassword: '/core/resetPassword',
+    createPlantpot: '/core/createPlantpot',
+    addBoardMessage: '/core/addBoardMessage',
+    getBoradMessages: '/core/getBoradMessages',
+    getTopInfo: '/core/getTopInfo',
+    getDBRecordCount: '/core/getDBRecordCount',
+    getArtwork: '/core/getArtwork',
+    editUser: '/core/editUser',
+    editUserImage: '/core/editUserImage',
+    getEditUserImportantCode: '/core/getEditUserImportantCode',
+    editUserImportant: '/core/editUserImportant',
+    clearUserImage: '/core/clearUserImage',
+    getTagsArtwork: '/core/getTagsArtwork/:id',
+    sendCommentArtwork: '/core/sendCommentArtwork',
+    getArtworkComments: '/core/getArtworkComments',
+    getCommentGalleryCount: '/core/getCommentGalleryCount',
+};
 
 // 加载控制器
 export function loadMachineController(machine=express()){
@@ -132,6 +167,37 @@ export function loadMachineController(machine=express()){
             catch(e){console.log(e);res.send(0);}
         })()
     });
+    machine.get(routeTable.getArtworkComments,(req,res)=>{ // 获取作品评论
+        let id = req.query.id;
+        let begin = req.query.begin
+        let num = req.query.num
+        if(!id){res.send(0);return;}
+        if(!begin){begin=0;}
+        if(!num){num=config.DATABASE_defaultLimit;}
+        (async ()=>{
+            GalleryComment.belongsTo(User,{foreignKey:'username',targetKey:'username'});
+            try{
+                let data = await GalleryComment.findAll({
+                    where:{galleryid:id},
+                    limit:Number(num),
+                    offset:Number(begin),    
+                    order:[['time','DESC']],
+                    include: [
+                        {
+                            model: User,
+                            attributes: ['name','headimage','sex','species'],
+                        },
+                    ],
+                });
+                res.send(data);
+            }
+            catch(e){console.log(e);res.send(0);}
+        })()
+        machine.get(routeTable.getCommentGalleryCount,(req,res)=>{ // 获取有关作品评论的数量
+            let id = req.query.id;
+            GalleryComment.count({where:{galleryid:id}}).then(count=>{res.send(count);});
+        })
+    })
     // POST
     machine.post(routeTable.checkLogin,(req,res)=>{ // 检查登录
         if(req.session.username){res.send(1);}else{res.send(0);}
@@ -554,5 +620,26 @@ export function loadMachineController(machine=express()){
             });
         }
         catch(e){console.log(e);res.send(0);}
+    });
+    machine.post(routeTable.sendCommentArtwork,(req,res)=>{ // 发送作品评论
+        let commentid = Math.floor(Math.pow(10,10)*Math.random())
+        let galleryid = req.body.id;
+        let username = req.session.username;
+        let content = req.body.content;
+        let time = Date();
+        if(!galleryid || !username || !content){res.send(0);return;}
+        try{
+            sqllize.transaction(async (t)=>{
+                await GalleryComment.create({
+                    id: commentid,
+                    galleryid: galleryid,
+                    username: username,
+                    content: content,
+                    time: time,
+                },{ transaction:t });
+                res.send(1);
+            });
+        }
+        catch(e){console.log(e);res.send(0);};
     });
 }

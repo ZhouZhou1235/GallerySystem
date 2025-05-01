@@ -11,6 +11,7 @@ export const tableName = {
     garden: 'garden',
     tag_garden: 'tag_garden',
     board: 'board',
+    gallery_comment: 'gallery_comment',
 };
 
 export const User = sqllize.define(tableName.user,
@@ -206,4 +207,30 @@ export const Board = sqllize.define(tableName.board,
         },
     },
     {timestamps: false,tableName: tableName.board},
+);
+
+export const GalleryComment = sqllize.define(tableName.gallery_comment,
+    {
+        id: {
+            type: DataTypes.STRING,
+            primaryKey: true,
+        },
+        galleryid: {
+            type: DataTypes.STRING,
+            allowNull: false,
+        },
+        username: {
+            type: DataTypes.STRING,
+            allowNull: false,
+        },
+        content: {
+            type: DataTypes.STRING,
+            allowNull: false,
+        },
+        time: {
+            type: DataTypes.DATE,
+            allowNull: false,
+        },
+    },
+    {timestamps: false,tableName: tableName.gallery_comment},
 );

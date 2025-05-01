@@ -1,7 +1,7 @@
 // 工具
 
 import bcrypt from "bcryptjs";
-import { Board, Gallery, Garden, tableName, Tag, TagGallery, TagGarden, User } from "./database/models.js";
+import { Board, Gallery, GalleryComment, Garden, tableName, Tag, TagGallery, TagGarden, User } from "./database/models.js";
 import sharp from "sharp";
 import fs from 'fs';
 import config  from "../config.js";
@@ -60,6 +60,7 @@ export function getDBRecordCount(table=''){
         case tableName.tag_gallery: return TagGallery.count();
         case tableName.tag_garden: return TagGarden.count();
         case tableName.user: return User.count();
+        case tableName.gallery_comment: return GalleryComment.count();
         default: return 0;
     }
 }

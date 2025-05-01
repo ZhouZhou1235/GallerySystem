@@ -9,37 +9,6 @@ export const workPath = dirname(fileURLToPath(import.meta.url));
 const config = {
     LISTEN_PORT: 3000, // 运行端口
     TEXT_ENCODING: 'utf8', // 文本编码
-    CONTROL_routeTable: { // 访问规则表
-        root: '/',
-        files_gallery: '/files/gallery/:filename',
-        files_headimage: '/files/headimage/:filename',
-        files_backimage: '/files/backimage/:filename',
-        files_galleryPreview: '/files/GalleryPreview/:filename',
-        checkLogin: '/core/checkLogin',
-        getUser: '/core/getUser/:username',
-        getSessionUser: '/core/getSessionUser',
-        login: '/core/login',
-        logout: '/core/logout',
-        uploadArtwork: '/core/uploadArtwork',
-        getArtworks: '/core/getArtworks',
-        getTags: '/core/getTags',
-        getRegisterCode: '/core/getRegisterCode',
-        register: '/core/register',
-        getResetPasswordCode: '/core/getResetPasswordCode',
-        resetPassword: '/core/resetPassword',
-        createPlantpot: '/core/createPlantpot',
-        addBoardMessage: '/core/addBoardMessage',
-        getBoradMessages: '/core/getBoradMessages',
-        getTopInfo: '/core/getTopInfo',
-        getDBRecordCount: '/core/getDBRecordCount',
-        getArtwork: '/core/getArtwork',
-        editUser: '/core/editUser',
-        editUserImage: '/core/editUserImage',
-        getEditUserImportantCode: '/core/getEditUserImportantCode',
-        editUserImportant: '/core/editUserImportant',
-        clearUserImage: '/core/clearUserImage',
-        getTagsArtwork: '/core/getTagsArtwork/:id',
-    },
     // session
     SESSION_secret: 'pinkcandy gallery', // session会话密钥
     SESSION_name: 'PINKCANDY_USER',
