@@ -1,6 +1,6 @@
 // 全局变量
 
-const GArea = {
+export const GArea = {
     tagtype_info: 1,
     tagtype_artist: 2,
     tagtype_series: 3,

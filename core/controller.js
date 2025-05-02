@@ -1,13 +1,16 @@
 // 控制器
 
 import express from 'express';
-import { Board, Gallery, GalleryComment, Garden, Tag, TagGallery, TagGarden, User } from './database/models.js';
-import { checkObjComplete, comparePasswordHash, compressImage, createPasswordHash, getDBRecordCount, getExtension, isEqualObj } from './utils.js';
+import { Board, Gallery, GalleryComment, GalleryPaw, GalleryStar, Garden, Tag, TagGallery, TagGarden, User } from './database/models.js';
+import { checkObjComplete, comparePasswordHash, compressImage, createPasswordHash, getExtension, isEqualObj } from './utils.js';
+import { getDBRecordCount } from './work.js';
 import config from '../config.js';
 import sqllize from './database/orm_sequelize.js';
 import { sendAMail } from './mailer.js';
 import fs from 'fs';
 import { console } from 'inspector';
+import { GArea } from './ConstVars.js';
+import { time } from 'console';
 
 // 访问规则表
 const routeTable = { 
@@ -43,6 +46,9 @@ const routeTable = {
     sendCommentArtwork: '/core/sendCommentArtwork',
     getArtworkComments: '/core/getArtworkComments',
     getCommentGalleryCount: '/core/getCommentGalleryCount',
+    pawArtworkMedia: '/core/pawArtworkMedia',
+    starArtworkMedia: '/core/starArtworkMedia',
+    getArtworkPawAreaInfo: '/core/getArtworkPawAreaInfo',
 };
 
 // 加载控制器
@@ -198,6 +204,27 @@ export function loadMachineController(machine=express()){
             GalleryComment.count({where:{galleryid:id}}).then(count=>{res.send(count);});
         })
     })
+    machine.get(routeTable.getArtworkPawAreaInfo,(req,res)=>{ // 获取作品印爪空间情况
+        let id = req.query.id;
+        let username = req.session.username;
+        if(!id){res.send(0);return;}
+        (async ()=>{
+            let result = {
+                pawnum: await GalleryPaw.count({where:{galleryid:id}}),
+                starnum: await GalleryStar.count({where:{galleryid:id}}),
+                commentnum: await GalleryComment.count({where:{galleryid:id}}),
+                user: {
+                    havepaw: false,
+                    havestar: false,
+                }
+            };
+            if(username){
+                result.user.havepaw = await GalleryPaw.findOne({where:{username:username,galleryid:id,commentid:null}})?true:false;
+                result.user.havestar = await GalleryStar.findOne({where:{username:username,galleryid:id}})?true:false;
+            }
+            res.send(result);
+        })()
+    });
     // POST
     machine.post(routeTable.checkLogin,(req,res)=>{ // 检查登录
         if(req.session.username){res.send(1);}else{res.send(0);}
@@ -641,5 +668,66 @@ export function loadMachineController(machine=express()){
             });
         }
         catch(e){console.log(e);res.send(0);};
+    });
+    machine.post(routeTable.pawArtworkMedia,(req,res)=>{ // 作品印爪
+        let username = req.session.username;
+        let id = req.body.id;
+        let commentid = req.body.commentid?req.body.commentid:null;
+        if(!username || !id){res.send(0);return;}
+        try{
+            (async ()=>{
+                let havePaw = await GalleryPaw.findOne({where:{username:username,galleryid:id,commentid:commentid}});
+                if(!havePaw){
+                    sqllize.transaction(async t=>{
+                        await GalleryPaw.create({
+                            username: username,
+                            galleryid: id,
+                            commentid: commentid,
+                            time: Date(),
+                        },{transaction: t});
+                    });
+                }
+                else{
+                    sqllize.transaction(async t=>{
+                        await GalleryPaw.destroy({where:{
+                            username: username,
+                            galleryid: id,
+                            commentid: commentid,
+                        }},{transaction: t});
+                    });
+                }
+                res.send(1);
+            })()
+        }
+        catch(e){console.log(e);res.send(0);}
+    });
+    machine.post(routeTable.starArtworkMedia,(req,res)=>{ // 作品收藏
+        let username = req.session.username;
+        let id = req.body.id;
+        if(!username || !id){res.send(0);return;}
+        try{
+            (async ()=>{
+                let haveStar = await GalleryStar.findOne({where:{username:username,galleryid:id}});
+                if(!haveStar){
+                    sqllize.transaction(async t=>{
+                        await GalleryStar.create({
+                            username: username,
+                            galleryid: id,
+                            time: Date(),
+                        },{transaction: t});
+                    });
+                }
+                else{
+                    sqllize.transaction(async t=>{
+                        await GalleryStar.destroy({where:{
+                            username: username,
+                            galleryid: id,
+                        }},{transaction: t});
+                    });
+                }
+                res.send(1);
+            })()
+        }
+        catch(e){console.log(e);res.send(0);}
     });
 }
