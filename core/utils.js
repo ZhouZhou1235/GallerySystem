@@ -1,11 +1,8 @@
 // 工具
 
 import bcrypt from "bcryptjs";
-import { Board, Gallery, GalleryComment, Garden, tableName, Tag, TagGallery, TagGarden, User } from "./database/models.js";
 import sharp from "sharp";
-import fs from 'fs';
 import config  from "../config.js";
-
 
 // === 通用
 
@@ -46,4 +43,18 @@ export function isEqualObj(obj1={},obj2={}){
 // 压缩图片
 export function compressImage(filepath,savepath,resizeNum=config.FILE_imageResizeNum){
     return sharp(filepath).resize(resizeNum).toFile(savepath)
+}
+
+// sequelize数据模型转JS对象
+export function modelToObj(model){return JSON.parse(JSON.stringify(model.toJSON()))}
+
+// sequelize数据模型数组转JS对象数组
+export function modelListToObjList(data=[]){
+    let objList = []
+    for(let i=0;i<data.length;i++){
+        let model = data[i];
+        let obj = modelToObj(model);
+        objList.push(obj);
+    }
+    return objList;
 }

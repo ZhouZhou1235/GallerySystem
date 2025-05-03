@@ -2,7 +2,7 @@
 
 import express from 'express';
 import { Board, Gallery, GalleryComment, GalleryPaw, GalleryStar, Garden, Tag, TagGallery, TagGarden, User } from './database/models.js';
-import { checkObjComplete, comparePasswordHash, compressImage, createPasswordHash, getExtension, isEqualObj } from './utils.js';
+import { checkObjComplete, comparePasswordHash, compressImage, createPasswordHash, getExtension, isEqualObj, modelListToObjList } from './utils.js';
 import { getDBRecordCount } from './work.js';
 import config from '../config.js';
 import sqllize from './database/orm_sequelize.js';
@@ -10,7 +10,6 @@ import { sendAMail } from './mailer.js';
 import fs from 'fs';
 import { console } from 'inspector';
 import { GArea } from './ConstVars.js';
-import { time } from 'console';
 
 // 访问规则表
 const routeTable = { 
@@ -177,6 +176,7 @@ export function loadMachineController(machine=express()){
         let id = req.query.id;
         let begin = req.query.begin
         let num = req.query.num
+        let username = req.session.username;
         if(!id){res.send(0);return;}
         if(!begin){begin=0;}
         if(!num){num=config.DATABASE_defaultLimit;}
@@ -195,7 +195,16 @@ export function loadMachineController(machine=express()){
                         },
                     ],
                 });
-                res.send(data);
+                let result = modelListToObjList(data);
+                for(let i=0;i<result.length;i++){
+                    let obj = result[i];
+                    obj['pawnum'] = await GalleryPaw.count({where:{commentid:obj.id}});
+                    obj['havepaw'] = false;
+                    if(username){
+                        obj['havepaw'] = await GalleryPaw.findOne({where:{galleryid:id,username:username,commentid:obj.id}})?true:false;
+                    }
+                }
+                res.send(result);
             }
             catch(e){console.log(e);res.send(0);}
         })()
