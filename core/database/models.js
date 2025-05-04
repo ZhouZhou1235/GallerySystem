@@ -14,6 +14,7 @@ export const tableName = {
     gallery_comment: 'gallery_comment',
     gallery_paw: 'gallery_paw',
     gallery_star: 'gallery_star',
+    user_watch: 'user_watch',
 };
 
 export const User = sqllize.define(tableName.user,
@@ -283,4 +284,26 @@ export const GalleryStar = sqllize.define(tableName.gallery_star,
         },
     },
     {timestamps: false,tableName: tableName.gallery_star},
+);
+
+export const UserWatch = sqllize.define(tableName.user_watch,
+    {
+        id: {
+            type: DataTypes.INTEGER,
+            primaryKey: true,
+        },
+        username: {
+            type: DataTypes.STRING,
+            allowNull: false,
+        },
+        watcher: {
+            type: DataTypes.STRING,
+            allowNull: false,
+        },
+        time: {
+            type: DataTypes.DATE,
+            allowNull: false,
+        },
+    },
+    {timestamps: false,tableName: tableName.user_watch},
 );

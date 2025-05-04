@@ -1,7 +1,7 @@
 // 控制器
 
 import express from 'express';
-import { Board, Gallery, GalleryComment, GalleryPaw, GalleryStar, Garden, Tag, TagGallery, TagGarden, User } from './database/models.js';
+import { Board, Gallery, GalleryComment, GalleryPaw, GalleryStar, Garden, Tag, TagGallery, TagGarden, User, UserWatch } from './database/models.js';
 import { checkObjComplete, comparePasswordHash, compressImage, createPasswordHash, getExtension, isEqualObj, modelListToObjList } from './utils.js';
 import { getDBRecordCount } from './work.js';
 import config from '../config.js';
@@ -48,6 +48,9 @@ const routeTable = {
     pawArtworkMedia: '/core/pawArtworkMedia',
     starArtworkMedia: '/core/starArtworkMedia',
     getArtworkPawAreaInfo: '/core/getArtworkPawAreaInfo',
+    haveWatch: '/core/haveWatch',
+    watchUser: '/core/watchUser',
+    getUserInfoCount: '/core/getUserInfoCount',
 };
 
 // 加载控制器
@@ -191,7 +194,7 @@ export function loadMachineController(machine=express()){
                     include: [
                         {
                             model: User,
-                            attributes: ['name','headimage','sex','species'],
+                            attributes: ['username','name','headimage','sex','species'],
                         },
                     ],
                 });
@@ -230,6 +233,34 @@ export function loadMachineController(machine=express()){
             if(username){
                 result.user.havepaw = await GalleryPaw.findOne({where:{username:username,galleryid:id,commentid:null}})?true:false;
                 result.user.havestar = await GalleryStar.findOne({where:{username:username,galleryid:id}})?true:false;
+            }
+            res.send(result);
+        })()
+    });
+    machine.get(routeTable.getUserInfoCount,(req,res)=>{ // 获取用户概况数
+        let username = req.query.username;
+        if(!username){res.send(0);return;}
+        (async ()=>{
+            let result = {
+                watchernum: await UserWatch.count({where:{username:username}}),
+                towatchnum: await UserWatch.count({where:{watcher:username}}),
+                medianum: await Gallery.count({where:{username:username}}),
+                gotpawnum: await (async()=>{
+                    // 复杂查询 获得的总印爪数
+                    // todo 盆栽和叶子的印爪
+                    let gotpawnum = 0;
+                    let artworkList = await Gallery.findAll({where:{username:username}});
+                    let artworkCommentList = await GalleryComment.findAll({where:{username:username}});
+                    for(let i=0;i<artworkList.length;i++){
+                        let galleryid = artworkList[i]['id'];
+                        gotpawnum += await GalleryPaw.count({where:{galleryid:galleryid,commentid:null}});
+                    }
+                    for(let i=0;i<artworkCommentList.length;i++){
+                        let gallerycommentid = artworkCommentList[i]['id'];
+                        gotpawnum += await GalleryPaw.count({where:{commentid:gallerycommentid}});
+                    }
+                    return gotpawnum;
+                })(),
             }
             res.send(result);
         })()
@@ -316,7 +347,7 @@ export function loadMachineController(machine=express()){
                 res.send(1);
             }
         }
-        catch(e){console.log(e);res.send(0);return;}
+        catch(e){console.log(e);res.send(0);}
     });
     machine.post(routeTable.getRegisterCode,(req,res)=>{ // 获取注册验证码
         let username = req.body.username;
@@ -363,7 +394,7 @@ export function loadMachineController(machine=express()){
                 req.session['username'] = username;
                 res.send(1);
             }
-            catch(e){console.log(e);res.send(0);return;}
+            catch(e){console.log(e);res.send(0);}
         }
         else{res.send(0);}
     });
@@ -472,7 +503,7 @@ export function loadMachineController(machine=express()){
             });
             if(result){res.send(1);}
         }
-        catch(e){console.log(e);res.send(0);return;}
+        catch(e){console.log(e);res.send(0);}
     });
     machine.post(routeTable.addBoardMessage,(req,res)=>{ // 留言
         let username = req.session.username;
@@ -513,7 +544,7 @@ export function loadMachineController(machine=express()){
                 res.send(1);
             });
         }
-        catch(e){console.log(e);}
+        catch(e){console.log(e);res.send(0);}
     });
     machine.post(routeTable.editUserImage,(req,res)=>{ // 修改用户图片
         let headimage = req.files?.headimage;
@@ -544,7 +575,7 @@ export function loadMachineController(machine=express()){
                     if(oldFilename){fs.unlinkSync(config.FILE_fileHub.headimage+oldFilename);}
                 });
             }
-            catch(e){console.log(e);}
+            catch(e){console.log(e);res.send(0);}
         }
         if(backimage){
             let id = Math.floor(Math.pow(10,10)*Math.random());
@@ -569,7 +600,7 @@ export function loadMachineController(machine=express()){
                     if(oldFilename){fs.unlinkSync(config.FILE_fileHub.backimage+oldFilename);}
                 });
             }
-            catch(e){console.log(e);}
+            catch(e){console.log(e);res.send(0);}
         }
         res.send(1);
     });
@@ -732,6 +763,51 @@ export function loadMachineController(machine=express()){
                             username: username,
                             galleryid: id,
                         }},{transaction: t});
+                    });
+                }
+                res.send(1);
+            })()
+        }
+        catch(e){console.log(e);res.send(0);}
+    });
+    machine.post(routeTable.haveWatch,(req,res)=>{ // 是否关注用户
+        let watcher = req.session.username;
+        let username = req.body.towatch;
+        if(!watcher){res.send(0);return;}
+        (async ()=>{
+            let haveWatch = await UserWatch.findOne({where:{
+                username: username,
+                watcher: watcher,
+            }});
+            res.send(haveWatch?1:0);    
+        })()
+    })
+    machine.post(routeTable.watchUser,(req,res)=>{ // 关注用户
+        let watcher = req.session.username;
+        let username = req.body.towatch;
+        if(!watcher){res.send(0);return;}
+        if(watcher==username){res.send(0);return;}
+        try{
+            (async ()=>{
+                let haveWatch = await UserWatch.findOne({where:{
+                    username: username,
+                    watcher: watcher,
+                }});
+                if(!haveWatch){
+                    sqllize.transaction(async t=>{
+                        await UserWatch.create({
+                            username: username,
+                            watcher: watcher,
+                            time: Date(),
+                        },{transaction:t});
+                    });
+                }
+                else{
+                    sqllize.transaction(async t=>{
+                        await UserWatch.destroy({where:{
+                            username: username,
+                            watcher: watcher,
+                        }},{transaction:t});
                     });
                 }
                 res.send(1);
