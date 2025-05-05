@@ -1,7 +1,7 @@
 // 控制器
 
 import express from 'express';
-import { Board, Gallery, GalleryComment, GalleryPaw, GalleryStar, Garden, Tag, TagGallery, TagGarden, User, UserWatch } from './database/models.js';
+import { Board, Gallery, GalleryComment, GalleryPaw, GalleryStar, Garden, GardenComment, GardenCommentReply, GardenPaw, Tag, TagGallery, TagGarden, User, UserWatch } from './database/models.js';
 import { checkObjComplete, comparePasswordHash, compressImage, createPasswordHash, getExtension, isEqualObj, modelListToObjList } from './utils.js';
 import { getDBRecordCount } from './work.js';
 import config from '../config.js';
@@ -18,6 +18,7 @@ const routeTable = {
     files_headimage: '/files/headimage/:filename',
     files_backimage: '/files/backimage/:filename',
     files_galleryPreview: '/files/GalleryPreview/:filename',
+    files_garden: '/files/garden/:filename',
     checkLogin: '/core/checkLogin',
     getUser: '/core/getUser/:username',
     getSessionUser: '/core/getSessionUser',
@@ -51,6 +52,8 @@ const routeTable = {
     haveWatch: '/core/haveWatch',
     watchUser: '/core/watchUser',
     getUserInfoCount: '/core/getUserInfoCount',
+    getPlantpots: '/core/getPlantpots',
+    getPlantpotComments: '/core/getPlantpotComments',
 };
 
 // 加载控制器
@@ -80,6 +83,12 @@ export function loadMachineController(machine=express()){
         let filename = req.params.filename;
         if(!filename){res.send(0);return;}
         let fileurl = config.FILE_fileHub.galleryPreview+filename;
+        res.sendFile(fileurl);
+    });
+    machine.get(routeTable.files_garden,(req,res)=>{
+        let filename = req.params.filename;
+        if(!filename){res.send(0);return;}
+        let fileurl = config.FILE_fileHub.garden+filename;
         res.sendFile(fileurl);
     });
     // GET
@@ -211,10 +220,10 @@ export function loadMachineController(machine=express()){
             }
             catch(e){console.log(e);res.send(0);}
         })()
-        machine.get(routeTable.getCommentGalleryCount,(req,res)=>{ // 获取有关作品评论的数量
-            let id = req.query.id;
-            GalleryComment.count({where:{galleryid:id}}).then(count=>{res.send(count);});
-        })
+    })
+    machine.get(routeTable.getCommentGalleryCount,(req,res)=>{ // 获取有关作品评论的数量
+        let id = req.query.id;
+        GalleryComment.count({where:{galleryid:id}}).then(count=>{res.send(count);});
     })
     machine.get(routeTable.getArtworkPawAreaInfo,(req,res)=>{ // 获取作品印爪空间情况
         let id = req.query.id;
@@ -265,6 +274,64 @@ export function loadMachineController(machine=express()){
             res.send(result);
         })()
     });
+    machine.get(routeTable.getPlantpots,(req,res)=>{ // 获取盆栽
+        let begin = req.query.begin
+        let num = req.query.num
+        if(!begin){begin=0;}
+        if(!num){num=config.DATABASE_defaultLimit;}
+        (async ()=>{
+            let data = await Garden.findAll({limit:Number(num),offset:Number(begin),order:[['updatetime','DESC']]});
+            res.send(data);
+        })()
+    });
+    machine.get(routeTable.getPlantpotComments,(req,res)=>{ // 获取盆栽叶子 包括叶纸条
+        let id = req.query.id;
+        let begin = req.query.begin
+        let num = req.query.num
+        let username = req.session.username;
+        if(!id){res.send(0);return;}
+        if(!begin){begin=0;}
+        if(!num){num=config.DATABASE_defaultLimit;}
+        (async ()=>{
+            GardenComment.belongsTo(User,{foreignKey:'username',targetKey:'username'});
+            try{
+                let data = await GardenComment.findAll({
+                    where:{gardenid:id},
+                    limit:Number(num),
+                    offset:Number(begin),    
+                    order:[['time','DESC']],
+                    include: [
+                        {
+                            model: User,
+                            attributes: ['username','name','headimage','sex','species'],
+                        },
+                    ],
+                });
+                let result = modelListToObjList(data);
+                for(let i=0;i<result.length;i++){
+                    let obj = result[i];
+                    obj['pawnum'] = await GardenPaw.count({where:{commentid:obj.id}});
+                    obj['havepaw'] = false;
+                    GardenCommentReply.belongsTo(User,{foreignKey:'username',targetKey:'username'});
+                    obj['reply'] = await GardenCommentReply.findAll({
+                        where:{commentid:obj.id},
+                        order:[['time','DESC']],
+                        include: [
+                            {
+                                model: User,
+                                attributes: ['username','name','headimage','sex','species'],
+                            }
+                        ],
+                    });
+                    if(username){
+                        obj['havepaw'] = await GardenPaw.findOne({where:{gardenid:id,username:username,commentid:obj.id}})?true:false;
+                    }
+                }
+                res.send(result);
+            }
+            catch(e){console.log(e);res.send(0);}
+        })()
+    })
     // POST
     machine.post(routeTable.checkLogin,(req,res)=>{ // 检查登录
         if(req.session.username){res.send(1);}else{res.send(0);}
