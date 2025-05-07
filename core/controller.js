@@ -1,7 +1,7 @@
 // 控制器
 
 import express from 'express';
-import { Board, Gallery, GalleryComment, GalleryPaw, GalleryStar, Garden, GardenComment, GardenCommentReply, GardenPaw, Tag, TagGallery, TagGarden, User, UserWatch } from './database/models.js';
+import { Board, Gallery, GalleryComment, GalleryPaw, GalleryStar, Garden, GardenComment, GardenCommentReply, GardenPaw, GardenStar, Tag, TagGallery, TagGarden, User, UserWatch } from './database/models.js';
 import { checkObjComplete, comparePasswordHash, compressImage, createPasswordHash, getExtension, isEqualObj, modelListToObjList } from './utils.js';
 import { getDBRecordCount } from './work.js';
 import config from '../config.js';
@@ -54,6 +54,11 @@ const routeTable = {
     getUserInfoCount: '/core/getUserInfoCount',
     getPlantpots: '/core/getPlantpots',
     getPlantpotComments: '/core/getPlantpotComments',
+    getCommentGardenCount: '/core/getCommentGardenCount',
+    pawPlantpotMedia: '/core/pawPlantpotMedia',
+    sendPlantpotCommentReply: '/core/sendPlantpotCommentReply',
+    starPlantpotMedia: '/core/starPlantpotMedia',
+    getPlantpotPawAreaInfo: '/core/getPlantpotPawAreaInfo',
 };
 
 // 加载控制器
@@ -332,6 +337,31 @@ export function loadMachineController(machine=express()){
             catch(e){console.log(e);res.send(0);}
         })()
     })
+    machine.get(routeTable.getCommentGardenCount,(req,res)=>{ // 获取有关盆栽的叶子数量
+        let id = req.query.id;
+        GardenComment.count({where:{gardenid:id}}).then(count=>{res.send(count);});
+    })
+    machine.get(routeTable.getPlantpotPawAreaInfo,(req,res)=>{ // 获取盆栽印爪空间情况
+        let id = req.query.id;
+        let username = req.session.username;
+        if(!id){res.send(0);return;}
+        (async ()=>{
+            let result = {
+                pawnum: await GardenPaw.count({where:{gardenid:id}}),
+                starnum: await GardenStar.count({where:{gardenid:id}}),
+                commentnum: await GardenComment.count({where:{gardenid:id}}),
+                user: {
+                    havepaw: false,
+                    havestar: false,
+                }
+            };
+            if(username){
+                result.user.havepaw = await GardenPaw.findOne({where:{username:username,gardenid:id,commentid:null}})?true:false;
+                result.user.havestar = await GardenStar.findOne({where:{username:username,gardenid:id}})?true:false;
+            }
+            res.send(result);
+        })()
+    });
     // POST
     machine.post(routeTable.checkLogin,(req,res)=>{ // 检查登录
         if(req.session.username){res.send(1);}else{res.send(0);}
@@ -875,6 +905,85 @@ export function loadMachineController(machine=express()){
                             username: username,
                             watcher: watcher,
                         }},{transaction:t});
+                    });
+                }
+                res.send(1);
+            })()
+        }
+        catch(e){console.log(e);res.send(0);}
+    });
+    machine.post(routeTable.pawPlantpotMedia,(req,res)=>{ // 盆栽印爪
+        let username = req.session.username;
+        let id = req.body.id;
+        let commentid = req.body.commentid?req.body.commentid:null;
+        if(!username || !id){res.send(0);return;}
+        try{
+            (async ()=>{
+                let havePaw = await GardenPaw.findOne({where:{username:username,gardenid:id,commentid:commentid}});
+                if(!havePaw){
+                    sqllize.transaction(async t=>{
+                        await GardenPaw.create({
+                            username: username,
+                            gardenid: id,
+                            commentid: commentid,
+                            time: Date(),
+                        },{transaction: t});
+                    });
+                }
+                else{
+                    sqllize.transaction(async t=>{
+                        await GardenPaw.destroy({where:{
+                            username: username,
+                            gardenid: id,
+                            commentid: commentid,
+                        }},{transaction: t});
+                    });
+                }
+                res.send(1);
+            })()
+        }
+        catch(e){console.log(e);res.send(0);}
+    });
+    machine.post(routeTable.sendPlantpotCommentReply,(req,res)=>{ // 发送叶纸条
+        let commentid = req.body.id;
+        let username = req.session.username;
+        let content = req.body.content;
+        if(!commentid || !username || !content){res.send(0);return;}
+        try{
+            sqllize.transaction(async (t)=>{
+                await GardenCommentReply.create({
+                    commentid: commentid,
+                    username: username,
+                    content: content,
+                    time: Date(),
+                },{ transaction:t });
+                res.send(1);
+            });
+        }
+        catch(e){console.log(e);res.send(0);};
+    });
+    machine.post(routeTable.starPlantpotMedia,(req,res)=>{ // 盆栽收藏
+        let username = req.session.username;
+        let id = req.body.id;
+        if(!username || !id){res.send(0);return;}
+        try{
+            (async ()=>{
+                let haveStar = await GardenStar.findOne({where:{username:username,gardenid:id}});
+                if(!haveStar){
+                    sqllize.transaction(async t=>{
+                        await GardenStar.create({
+                            username: username,
+                            gardenid: id,
+                            time: Date(),
+                        },{transaction: t});
+                    });
+                }
+                else{
+                    sqllize.transaction(async t=>{
+                        await GardenStar.destroy({where:{
+                            username: username,
+                            gardenid: id,
+                        }},{transaction: t});
                     });
                 }
                 res.send(1);
