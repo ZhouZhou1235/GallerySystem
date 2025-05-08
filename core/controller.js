@@ -59,6 +59,9 @@ const routeTable = {
     sendPlantpotCommentReply: '/core/sendPlantpotCommentReply',
     starPlantpotMedia: '/core/starPlantpotMedia',
     getPlantpotPawAreaInfo: '/core/getPlantpotPawAreaInfo',
+    sendCommentPlantpot: '/core/sendCommentPlantpot',
+    getPlantpot: '/core/getPlantpot',
+    getTagsPlantpot: '/core/getTagsPlantpot',
 };
 
 // 加载控制器
@@ -304,7 +307,7 @@ export function loadMachineController(machine=express()){
                     where:{gardenid:id},
                     limit:Number(num),
                     offset:Number(begin),    
-                    order:[['time','DESC']],
+                    order:[['time','ASC']],
                     include: [
                         {
                             model: User,
@@ -320,7 +323,7 @@ export function loadMachineController(machine=express()){
                     GardenCommentReply.belongsTo(User,{foreignKey:'username',targetKey:'username'});
                     obj['reply'] = await GardenCommentReply.findAll({
                         where:{commentid:obj.id},
-                        order:[['time','DESC']],
+                        order:[['time','ASC']],
                         include: [
                             {
                                 model: User,
@@ -360,6 +363,35 @@ export function loadMachineController(machine=express()){
                 result.user.havestar = await GardenStar.findOne({where:{username:username,gardenid:id}})?true:false;
             }
             res.send(result);
+        })()
+    });
+    machine.get(routeTable.getPlantpot,(req,res)=>{ // 获取一个盆栽
+        let id = req.query.id;
+        if(!id){res.send(0);return;}
+        (async ()=>{
+            let data = await Garden.findOne({where:{id:id}});
+            res.send(data);
+        })()
+    });
+    machine.get(routeTable.getTagsPlantpot,(req,res)=>{ // 获取盆栽的标签
+        let id = req.params.id;
+        if(!id){res.send(0);return;}
+        (async()=>{
+            Tag.belongsTo(TagGarden,{foreignKey:'id',targetKey:'tagid'});
+            try{
+                let data = await Tag.findAll({
+                    order:[['type','ASC']],
+                    include: [
+                        {
+                            model: TagGarden,
+                            attributes: ['gardenid'],
+                            where:{gardenid:id},
+                        },
+                    ]
+                });
+                res.send(data);
+            }
+            catch(e){console.log(e);res.send(0);}
         })()
     });
     // POST
@@ -990,5 +1022,30 @@ export function loadMachineController(machine=express()){
             })()
         }
         catch(e){console.log(e);res.send(0);}
+    });
+    machine.post(routeTable.sendCommentPlantpot,(req,res)=>{ // 生长叶子
+        let commentid = Math.floor(Math.pow(10,10)*Math.random())
+        let gardenid = req.body.id;
+        let username = req.session.username;
+        let content = req.body.content;
+        if(!gardenid || !username || !content){res.send(0);return;}
+        try{
+            sqllize.transaction(async (t)=>{
+                await GardenComment.create({
+                    id: commentid,
+                    gardenid: gardenid,
+                    username: username,
+                    content: content,
+                    time: Date(),
+                },{ transaction:t });
+                await Garden.update(
+                    {updatetime: Date()},
+                    {where:{id:gardenid}},
+                    { transaction:t },
+                );
+                res.send(1);
+            });
+        }
+        catch(e){console.log(e);res.send(0);};
     });
 }
