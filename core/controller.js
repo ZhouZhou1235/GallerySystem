@@ -62,6 +62,7 @@ const routeTable = {
     sendCommentPlantpot: '/core/sendCommentPlantpot',
     getPlantpot: '/core/getPlantpot',
     getTagsPlantpot: '/core/getTagsPlantpot',
+    getUserWatch: '/core/getUserWatch',
 };
 
 // 加载控制器
@@ -109,13 +110,20 @@ export function loadMachineController(machine=express()){
         User.findOne({where:{username:username}}).then(data=>{res.send(data);});
     });
     machine.get(routeTable.getArtworks,(req,res)=>{ // 获取作品
-        let queryObj = req.query
-        let begin = queryObj.begin
-        let num = queryObj.num
+        let begin = req.query.begin;
+        let num = req.query.num;
+        let username = req.query.username;
+        let condition = {};
         if(!begin){begin=0;}
         if(!num){num=config.DATABASE_defaultLimit;}
+        if(username){condition={username:username};}
         (async ()=>{
-            let data = await Gallery.findAll({limit:Number(num),offset:Number(begin),order:[['time','DESC']]});
+            let data = await Gallery.findAll({
+                limit:Number(num),
+                offset:Number(begin),
+                order:[['time','DESC']],
+                where:condition,
+            });
             res.send(data);
         })()
     });
@@ -131,9 +139,8 @@ export function loadMachineController(machine=express()){
         })()
     })
     machine.get(routeTable.getBoradMessages,(req,res)=>{ // 获取留言板信息
-        let queryObj = req.query
-        let begin = queryObj.begin
-        let num = queryObj.num
+        let begin = req.query.begin;
+        let num = req.query.num;
         if(!begin){begin=0;}
         if(!num){num=config.DATABASE_defaultLimit;}
         (async ()=>{
@@ -261,7 +268,8 @@ export function loadMachineController(machine=express()){
             let result = {
                 watchernum: await UserWatch.count({where:{username:username}}),
                 towatchnum: await UserWatch.count({where:{watcher:username}}),
-                medianum: await Gallery.count({where:{username:username}}),
+                artworknum: await Gallery.count({where:{username:username}}),
+                plantpotnum: await Garden.count({where:{username:username}}),
                 gotpawnum: await (async()=>{
                     // 复杂查询 获得的总印爪数
                     // todo 盆栽和叶子的印爪
@@ -283,12 +291,20 @@ export function loadMachineController(machine=express()){
         })()
     });
     machine.get(routeTable.getPlantpots,(req,res)=>{ // 获取盆栽
-        let begin = req.query.begin
-        let num = req.query.num
+        let begin = req.query.begin;
+        let num = req.query.num;
+        let username = req.query.username;
+        let condition = {};
         if(!begin){begin=0;}
         if(!num){num=config.DATABASE_defaultLimit;}
+        if(username){condition={username:username};}
         (async ()=>{
-            let data = await Garden.findAll({limit:Number(num),offset:Number(begin),order:[['updatetime','DESC']]});
+            let data = await Garden.findAll({
+                limit:Number(num),
+                offset:Number(begin),
+                order:[['updatetime','DESC']],
+                where: condition,
+            });
             res.send(data);
         })()
     });
@@ -392,6 +408,47 @@ export function loadMachineController(machine=express()){
                 res.send(data);
             }
             catch(e){console.log(e);res.send(0);}
+        })()
+    });
+    machine.get(routeTable.getUserWatch,(req,res)=>{ // 获取用户粉丝与关注
+        let username = req.query.username;
+        let begin = req.query.begin;
+        let num = req.query.num;
+        if(!username){res.send(0);return;}
+        if(!begin){begin=0;}
+        if(!num){num=config.DATABASE_defaultLimit;}
+        (async()=>{
+            UserWatch.belongsTo(User,{foreignKey:'watcher',targetKey:'username'});
+            let watcher = await UserWatch.findAll({
+                where:{username:username},
+                limit:Number(num),
+                offset:Number(begin),
+                order:[['time','DESC']],
+                include: [
+                    {
+                        model: User,
+                        attributes: ['username','name','headimage','sex','species'],
+                    },
+                ],
+            });
+            UserWatch.belongsTo(User,{foreignKey:'username',targetKey:'username'});
+            let towatch = await UserWatch.findAll({
+                where:{watcher:username},
+                limit:Number(num),
+                offset:Number(begin),
+                order:[['time','DESC']],
+                include: [
+                    {
+                        model: User,
+                        attributes: ['username','name','headimage','sex','species'],
+                    },
+                ],
+            });
+            let result = {
+                watcher: watcher,
+                towatch: towatch,
+            };
+            res.send(result);
         })()
     });
     // POST
@@ -699,7 +756,7 @@ export function loadMachineController(machine=express()){
                         { transaction:t },
                     );
                     await headimage.mv(tmpSavepath);
-                    await compressImage(tmpSavepath,savepath);
+                    if(ext!='gif'||ext!='GIF'){await compressImage(tmpSavepath,savepath);}
                     fs.unlinkSync(tmpSavepath);
                     if(oldFilename){fs.unlinkSync(config.FILE_fileHub.headimage+oldFilename);}
                 });
@@ -724,7 +781,7 @@ export function loadMachineController(machine=express()){
                         { transaction:t },
                     );
                     await backimage.mv(tmpSavepath)
-                    await compressImage(tmpSavepath,savepath,config.FILE_imageResizeNum*4);
+                    if(ext!='gif'||ext!='GIF'){await compressImage(tmpSavepath,savepath,config.FILE_imageResizeNum*4);}
                     fs.unlinkSync(tmpSavepath);
                     if(oldFilename){fs.unlinkSync(config.FILE_fileHub.backimage+oldFilename);}
                 });

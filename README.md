@@ -1,23 +1,33 @@
 # 幻想动物画廊系统
-## 开发者 pinkcandyzhou
+## 总管理员 pinkcandyzhou
 项目地址 [幻想动物画廊](https://gallery.pinkcandy.top)
 
-**正在运行第一版**
+### 描述
+欢迎访问粉糖画廊系统代码仓库，这是本网站站长小蓝狗❄️创建的开源项目；<br>
+本项目为幻想动物画廊的后端，见[幻想动物画廊](https://github.com/ZhouZhou1235/pinkcandy-gallery)；<br>
 
-- 第二版（开发中） Node.js Express 
-- 第一版 纯PHP
+**正在运行第一版**
+第一版计划废弃，正在开发第二版。
+
+- 第二版 Node.js Express 
+- 第一版 PHP
 
 ------
 
-## 幻想动物画廊接口
-（开发中 还未上线）
-| 方法 | URL | 参数 | 说明 |
-|-----|----------|----------|----------|
-| get | / | null | 欢迎 |
-| post | / | null | post测试 |
-......
+### 幻想动物画廊接口（开发中）
+前端异步请求 后端响应返回
+请求规范：获取数据使用get 提交表单或执行操作使用post
+响应规范：内容json/string/html/文件/... 成功1 失败0
+| 方法 | URL | 参数 | 说明 | 返回内容 |
+|-----|-----|-----|-----|-----|
+| get | / | null | 欢迎 | string |
+| post | / | null | post测试 | string |
+| get | /core/getUser/:username | username | 获取用户 | {...} |
+| get | /core/getSessionUser | null | 获取用户自己 | {...} |
+| get | /core/getArtworks | begin,num,username | 获取作品 | {...} |
+| - | - | - | - | - |
 
-## 粉糖主站的接口请求示例（计划废弃）
+### 粉糖主站的接口请求示例（计划废弃）
 ```
 import requests
 import json
@@ -67,7 +77,7 @@ print(json.loads(res5.text))
 print(json.loads(res6.text))
 ```
 
-## 第一版系统接口说明
+### 第一版系统接口说明（计划废弃）
 ```
     /**
     * ## coreEntry 请求入口
