@@ -4,8 +4,6 @@ import bcrypt from "bcryptjs";
 import sharp from "sharp";
 import config  from "../config.js";
 
-// === 通用
-
 // bcrypt 密码哈希
 export function createPasswordHash(password){
     return bcrypt.hashSync(password,bcrypt.genSaltSync());
@@ -58,3 +56,6 @@ export function modelListToObjList(data=[]){
     }
     return objList;
 }
+
+// 生成随机数字号码
+export function createRandomID(lengthnum=10){return Math.floor(Math.pow(10,lengthnum)*Math.random())}

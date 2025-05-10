@@ -2,14 +2,13 @@
 
 import express from 'express';
 import { Board, Gallery, GalleryComment, GalleryPaw, GalleryStar, Garden, GardenComment, GardenCommentReply, GardenPaw, GardenStar, Tag, TagGallery, TagGarden, User, UserWatch } from './database/models.js';
-import { checkObjComplete, comparePasswordHash, compressImage, createPasswordHash, getExtension, isEqualObj, modelListToObjList } from './utils.js';
-import { getDBRecordCount } from './work.js';
+import { checkObjComplete, comparePasswordHash, compressImage, createPasswordHash, createRandomID, getExtension, isEqualObj, modelListToObjList } from './utils.js';
+import { addTagsForArtwork, addTagsForPlantpot, getDBRecordCount, imageCompressToSave } from './work.js';
 import config from '../config.js';
 import sqllize from './database/orm_sequelize.js';
 import { sendAMail } from './mailer.js';
 import fs from 'fs';
 import { console } from 'inspector';
-import { GArea } from './ConstVars.js';
 
 // 访问规则表
 const routeTable = { 
@@ -61,8 +60,15 @@ const routeTable = {
     getPlantpotPawAreaInfo: '/core/getPlantpotPawAreaInfo',
     sendCommentPlantpot: '/core/sendCommentPlantpot',
     getPlantpot: '/core/getPlantpot',
-    getTagsPlantpot: '/core/getTagsPlantpot',
+    getTagsPlantpot: '/core/getTagsPlantpot/:id',
     getUserWatch: '/core/getUserWatch',
+    getStarArtworks: '/core/getStarArtworks',
+    getStarPlantpots: '/core/getStarPlantpots',
+    getUserStarInfoCount: '/core/getUserStarInfoCount',
+    editArtwork: '/core/editArtwork',
+    editPlantpot: '/core/editPlantpot',
+    deleteArtwork: '/core/deleteArtwork',
+    deletePlantpot: '/core/deletePlantpot',
 };
 
 // 加载控制器
@@ -451,6 +457,55 @@ export function loadMachineController(machine=express()){
             res.send(result);
         })()
     });
+    machine.get(routeTable.getStarArtworks,(req,res)=>{ // 获取收藏的作品
+        let begin = req.query.begin;
+        let num = req.query.num;
+        let username = req.query.username?req.query.username:req.session.username;
+        if(!begin){begin=0;}
+        if(!num){num=config.DATABASE_defaultLimit;}
+        if(!username){res.send(0);return;}
+        (async ()=>{
+            GalleryStar.belongsTo(Gallery,{foreignKey:'galleryid',targetKey:'id'})
+            let data = await GalleryStar.findAll({
+                limit:Number(num),
+                offset:Number(begin),
+                order:[['time','DESC']],
+                where:{username:username},
+                include:[{model: Gallery}],
+            });
+            res.send(data);
+        })();
+    });
+    machine.get(routeTable.getStarPlantpots,(req,res)=>{ // 获取收藏的盆栽
+        let begin = req.query.begin;
+        let num = req.query.num;
+        let username = req.query.username?req.query.username:req.session.username;
+        if(!begin){begin=0;}
+        if(!num){num=config.DATABASE_defaultLimit;}
+        if(!username){res.send(0);return;}
+        (async ()=>{
+            GardenStar.belongsTo(Garden,{foreignKey:'gardenid',targetKey:'id'})
+            let data = await GardenStar.findAll({
+                limit:Number(num),
+                offset:Number(begin),
+                order:[['time','DESC']],
+                where:{username:username},
+                include:[{model: Garden}],
+            });
+            res.send(data);
+        })();
+    });
+    machine.get(routeTable.getUserStarInfoCount,(req,res)=>{ // 获取用户收藏概况数
+        let username = req.query.username?req.query.username:req.session.username;
+        if(!username){res.send(0);return;}
+        (async ()=>{
+            let result = {
+                artworknum: await GalleryStar.count({where:{username:username}}),
+                plantpotnum: await GardenStar.count({where:{username:username}}),
+            }
+            res.send(result);
+        })()
+    });
     // POST
     machine.post(routeTable.checkLogin,(req,res)=>{ // 检查登录
         if(req.session.username){res.send(1);}else{res.send(0);}
@@ -478,7 +533,7 @@ export function loadMachineController(machine=express()){
         let info = artworkForm.info;
         let tags = artworkForm.tags;
         let file = req.files?.file;
-        let id = Math.floor(Math.pow(10,10)*Math.random());
+        let id = createRandomID();
         let username = req.session.username;
         if(!title || !file || !username){res.send(0);return;}
         let ext = getExtension(file.name);
@@ -498,38 +553,12 @@ export function loadMachineController(machine=express()){
                 },{ transaction:t });
                 if(tags){
                     let tagList = JSON.parse(tags);
-                    for(let tag in tagList){
-                        Tag.findOne({where:{tag:tagList[tag]}}).then((data)=>{
-                            if(!data){
-                                let tagid = Math.floor(Math.pow(10,10)*Math.random());
-                                sqllize.transaction(async t=>{
-                                    await Tag.create({
-                                        id: tagid,
-                                        tag: tagList[tag],
-                                        type: GArea.tagtype_info,
-                                        time: Date(),
-                                    },{ transaction:t });
-                                    await TagGallery.create({
-                                        tagid: tagid,
-                                        galleryid: id,
-                                    },{ transaction:t });    
-                                });
-                            }
-                            else{
-                                sqllize.transaction(async t=>{
-                                    await TagGallery.create({
-                                        tagid: data.id,
-                                        galleryid: id,
-                                    },{ transaction:t });    
-                                });
-                            }
-                        });
-                    }
+                    addTagsForArtwork(tagList);
                 }
             });
             if(result){
                 await file.mv(savepath);
-                if(ext!='gif'||ext!='GIF'){compressImage(savepath,config.FILE_fileHub.galleryPreview+saveFilename);}
+                await compressImage(savepath,config.FILE_fileHub.galleryPreview+saveFilename);
                 res.send(1);
             }
         }
@@ -634,7 +663,7 @@ export function loadMachineController(machine=express()){
         let content = plantpotForm.content;
         let tags = plantpotForm.tags;
         let file = req.files?.file;
-        let id = Math.floor(Math.pow(10,10)*Math.random());
+        let id = createRandomID();
         let username = req.session.username;
         if(!title || !content || !username){res.send(0);return;}
         let saveFilename = null;
@@ -658,33 +687,7 @@ export function loadMachineController(machine=express()){
                 },{ transaction:t });
                 if(tags){
                     let tagList = JSON.parse(tags);
-                    for(let tag in tagList){
-                        Tag.findOne({where:{tag:tagList[tag]}}).then((data)=>{
-                            if(!data){
-                                let tagid = Math.floor(Math.pow(10,10)*Math.random());
-                                sqllize.transaction(async t=>{
-                                    await Tag.create({
-                                        id: tagid,
-                                        tag: tagList[tag],
-                                        type: 1,
-                                        time: Date(),
-                                    },{ transaction:t });
-                                    await TagGarden.create({
-                                        tagid: tagid,
-                                        gardenid: id,
-                                    },{ transaction:t });
-                                });
-                            }
-                            else{
-                                sqllize.transaction(async t=>{
-                                    await TagGarden.create({
-                                        tagid: data.id,
-                                        gardenid: id,
-                                    },{ transaction:t });
-                                });
-                            }
-                        });
-                    }
+                    await addTagsForPlantpot(id,tagList);
                 }
             });
             if(result){res.send(1);}
@@ -739,13 +742,11 @@ export function loadMachineController(machine=express()){
         if(!username){res.send(0);return;}
         if(!headimage && !backimage){res.send(0);return;}
         if(headimage){
-            let id = Math.floor(Math.pow(10,10)*Math.random());
+            let id = createRandomID();
             let ext = getExtension(headimage.name);
             if(!ext in config.FILE_imageAllowExtension){res.send(0);return;}
             let saveFilename = id+'.'+ext;
-            let saveTmpFilename = id+'tmp'+'.'+ext;
             let savepath = config.FILE_fileHub.headimage+saveFilename;
-            let tmpSavepath = config.FILE_fileHub.headimage+saveTmpFilename;
             try{
                 sqllize.transaction(async t=>{
                     let oldFilename;
@@ -755,22 +756,18 @@ export function loadMachineController(machine=express()){
                         {where:{username:username}},
                         { transaction:t },
                     );
-                    await headimage.mv(tmpSavepath);
-                    if(ext!='gif'||ext!='GIF'){await compressImage(tmpSavepath,savepath);}
-                    fs.unlinkSync(tmpSavepath);
+                    await imageCompressToSave(headimage,savepath);
                     if(oldFilename){fs.unlinkSync(config.FILE_fileHub.headimage+oldFilename);}
                 });
             }
             catch(e){console.log(e);res.send(0);}
         }
         if(backimage){
-            let id = Math.floor(Math.pow(10,10)*Math.random());
+            let id = createRandomID();
             let ext = getExtension(backimage.name);
             if(!ext in config.FILE_imageAllowExtension){res.send(0);return;}
             let saveFilename = id+'.'+ext;
-            let saveTmpFilename = id+'tmp'+'.'+ext;
             let savepath = config.FILE_fileHub.backimage+saveFilename;
-            let tmpSavepath = config.FILE_fileHub.backimage+saveTmpFilename;
             try{
                 sqllize.transaction(async t=>{
                     let oldFilename;
@@ -780,9 +777,7 @@ export function loadMachineController(machine=express()){
                         {where:{username:username}},
                         { transaction:t },
                     );
-                    await backimage.mv(tmpSavepath)
-                    if(ext!='gif'||ext!='GIF'){await compressImage(tmpSavepath,savepath,config.FILE_imageResizeNum*4);}
-                    fs.unlinkSync(tmpSavepath);
+                    await imageCompressToSave(backimage,savepath);
                     if(oldFilename){fs.unlinkSync(config.FILE_fileHub.backimage+oldFilename);}
                 });
             }
@@ -875,7 +870,7 @@ export function loadMachineController(machine=express()){
         catch(e){console.log(e);res.send(0);}
     });
     machine.post(routeTable.sendCommentArtwork,(req,res)=>{ // 发送作品评论
-        let commentid = Math.floor(Math.pow(10,10)*Math.random())
+        let commentid = createRandomID()
         let galleryid = req.body.id;
         let username = req.session.username;
         let content = req.body.content;
@@ -967,7 +962,7 @@ export function loadMachineController(machine=express()){
             }});
             res.send(haveWatch?1:0);    
         })()
-    })
+    });
     machine.post(routeTable.watchUser,(req,res)=>{ // 关注用户
         let watcher = req.session.username;
         let username = req.body.towatch;
@@ -1081,28 +1076,167 @@ export function loadMachineController(machine=express()){
         catch(e){console.log(e);res.send(0);}
     });
     machine.post(routeTable.sendCommentPlantpot,(req,res)=>{ // 生长叶子
-        let commentid = Math.floor(Math.pow(10,10)*Math.random())
+        let commentid = createRandomID()
         let gardenid = req.body.id;
         let username = req.session.username;
         let content = req.body.content;
+        let file = req.files?.file;
         if(!gardenid || !username || !content){res.send(0);return;}
-        try{
-            sqllize.transaction(async (t)=>{
-                await GardenComment.create({
-                    id: commentid,
-                    gardenid: gardenid,
-                    username: username,
-                    content: content,
-                    time: Date(),
-                },{ transaction:t });
-                await Garden.update(
-                    {updatetime: Date()},
-                    {where:{id:gardenid}},
-                    { transaction:t },
-                );
+        (async()=>{
+            try{
+                let filename;
+                if(file){
+                    filename = commentid+'.'+getExtension(file.name);
+                    let savepath = config.FILE_fileHub.garden+filename;
+                    let ok = await imageCompressToSave(file,savepath,512);
+                    if(!ok){res.send(0);return;}
+                }
+                sqllize.transaction(async (t)=>{
+                    await GardenComment.create({
+                        id: commentid,
+                        gardenid: gardenid,
+                        username: username,
+                        content: content,
+                        filename: filename?filename:null,
+                        time: Date(),
+                    },{ transaction:t });
+                    await Garden.update(
+                        {updatetime: Date()},
+                        {where:{id:gardenid}},
+                        { transaction:t },
+                    );
+                    res.send(1);
+                });
+            }
+            catch(e){console.log(e);res.send(0);};
+        })();
+    });
+    machine.post(routeTable.editArtwork,(req,res)=>{ // 修改作品
+        let id = req.body.id;
+        let title = req.body.title;
+        let info = req.body.info;
+        let tags = req.body.tags;
+        let username = req.session.username;
+        if(!id || !title || !username){res.send(0);return;}
+        (async()=>{
+            let artwork = await Gallery.findOne({where:{id:id}});
+            if(artwork.username!=username){res.send(0);return;}
+            try{
+                sqllize.transaction(async t=>{
+                    await Gallery.update(
+                        {
+                            title: title,
+                            info: info,
+                        },
+                        {where:{id:id}},
+                        { transaction:t },
+                    );
+                    await TagGallery.destroy(
+                        {where:{galleryid:id}},
+                        { transaction:t },
+                    );
+                    if(tags){
+                        let tagList = JSON.parse(tags);
+                        await addTagsForArtwork(id,tagList);
+                    }
+                    res.send(1);
+                });
+            }
+            catch(e){console.log(e);res.send(0);}
+        })();
+    });
+    machine.post(routeTable.editPlantpot,(req,res)=>{ // 修改盆栽
+        let id = req.body.id;
+        let title = req.body.title;
+        let content = req.body.content;
+        let tags = req.body.tags;
+        let username = req.session.username;
+        if(!id || !title || !username || !content){res.send(0);return;}
+        (async()=>{
+            let plantpot = await Garden.findOne({where:{id:id}});
+            if(plantpot.username!=username){res.send(0);return;}
+            try{
+                sqllize.transaction(async t=>{
+                    await Garden.update(
+                        {
+                            title: title,
+                            content: content,
+                            updatetime: Date(),
+                        },
+                        {where:{id:id}},
+                        { transaction:t },
+                    );
+                    await TagGarden.destroy(
+                        {where:{gardenid:id}},
+                        { transaction:t },
+                    );
+                    if(tags){
+                        let tagList = JSON.parse(tags);
+                        await addTagsForPlantpot(id,tagList);
+                    }
+                    res.send(1);
+                });
+            }
+            catch(e){console.log(e);res.send(0);}
+        })();
+    });
+    machine.post(routeTable.deleteArtwork,(req,res)=>{ // 删除作品
+        let id = req.body.id;
+        let username = req.session.username;
+        if(!id || !username){res.send(0);return;}
+        (async ()=>{
+            let artwork = await Gallery.findOne({where:{id:id}});
+            if(artwork.username!=username){res.send(0);return;}
+            try{
+                sqllize.transaction(async t=>{
+                    await Gallery.destroy({where:{id:id}},{ transaction:t });
+                    await GalleryComment.destroy({where:{galleryid:id}},{ transaction:t });
+                    await GalleryPaw.destroy({where:{galleryid:id}},{ transaction:t });
+                    await GalleryStar.destroy({where:{galleryid:id}},{ transaction:t });
+                    await TagGallery.destroy({where:{galleryid:id}},{ transaction:t });
+                });
+                fs.unlinkSync(config.FILE_fileHub.gallery+artwork.filename);
+                fs.unlinkSync(config.FILE_fileHub.galleryPreview+artwork.filename);
                 res.send(1);
-            });
-        }
-        catch(e){console.log(e);res.send(0);};
+            }
+            catch(e){console.log(e);res.send(0);}
+        })();
+    });
+    machine.post(routeTable.deletePlantpot,(req,res)=>{ // 删除盆栽
+        let id = req.body.id;
+        let username = req.session.username;
+        if(!id || !username){res.send(0);return;}
+        (async ()=>{
+            let plantpot = await Garden.findOne({where:{id:id}});
+            if(plantpot.username!=username){res.send(0);return;}
+            try{
+                let comments = await GardenComment.findAll({where:{gardenid:id}});
+                let commentObjArray = modelListToObjList(comments);
+                sqllize.transaction(async t=>{
+                    await Garden.destroy({where:{id:id}},{ transaction:t });
+                    await GardenComment.destroy({where:{gardenid:id}},{ transaction:t });
+                    await GardenPaw.destroy({where:{gardenid:id}},{ transaction:t });
+                    await GardenStar.destroy({where:{gardenid:id}},{ transaction:t });
+                    await TagGarden.destroy({where:{gardenid:id}},{ transaction:t });
+                    for(let i=0;i<commentObjArray.length;i++){
+                        let commentid = commentObjArray[i].id;
+                        let replys = await GardenCommentReply.findAll({where:{commentid:commentid}});
+                        let replysArray = modelListToObjList(replys);
+                        for(let j=0;j<replysArray.length;j++){
+                            let commentreplyid = replysArray[j].id;
+                            await GardenCommentReply.destroy({where:{id:commentreplyid}},{ transaction:t });
+                        }
+                    }
+                });
+                if(plantpot.filename){fs.unlinkSync(config.FILE_fileHub.garden+plantpot.filename);}
+                for(let i=0;i<commentObjArray.length;i++){
+                    let comment = commentObjArray[i];
+                    let filename = comment.filename;
+                    if(filename){fs.unlinkSync(config.FILE_fileHub.garden+filename);}
+                }
+                res.send(1);
+            }
+            catch(e){console.log(e);res.send(0);}
+        })();
     });
 }

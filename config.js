@@ -42,6 +42,7 @@ const config = {
         garden: workPath+'/files/garden/',
         headimage: workPath+'/files/headimage/',
         backimage: workPath+'/files/backimage/',
+        tmp: workPath+'/files/tmp/',
     },
     FILE_staticURL: workPath+'/static',
     FILE_imageAllowExtension: [
