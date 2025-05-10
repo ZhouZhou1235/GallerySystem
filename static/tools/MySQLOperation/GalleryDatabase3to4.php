@@ -226,5 +226,5 @@ for($i=0;$i<count($watch_accountList);$i++){
     ");
 }
 
-$db4->query("'UPDATE gallery_paw SET commentid=NULL WHERE commentid=''");
-$db4->query("'UPDATE garden_paw SET commentid=NULL WHERE commentid=''");
+$db4->query("UPDATE gallery_paw SET commentid=NULL WHERE commentid=''");
+$db4->query("UPDATE garden_paw SET commentid=NULL WHERE commentid=''");

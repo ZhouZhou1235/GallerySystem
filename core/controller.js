@@ -252,7 +252,7 @@ export function loadMachineController(machine=express()){
         if(!id){res.send(0);return;}
         (async ()=>{
             let result = {
-                pawnum: await GalleryPaw.count({where:{galleryid:id}}),
+                pawnum: await GalleryPaw.count({where:{galleryid:id,commentid:null}}),
                 starnum: await GalleryStar.count({where:{galleryid:id}}),
                 commentnum: await GalleryComment.count({where:{galleryid:id}}),
                 user: {
@@ -372,7 +372,7 @@ export function loadMachineController(machine=express()){
         if(!id){res.send(0);return;}
         (async ()=>{
             let result = {
-                pawnum: await GardenPaw.count({where:{gardenid:id}}),
+                pawnum: await GardenPaw.count({where:{gardenid:id,commentid:null}}),
                 starnum: await GardenStar.count({where:{gardenid:id}}),
                 commentnum: await GardenComment.count({where:{gardenid:id}}),
                 user: {
