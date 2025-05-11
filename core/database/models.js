@@ -19,6 +19,7 @@ export const tableName = {
     garden_paw: 'garden_paw',
     garden_star: 'garden_star',
     garden_comment_reply: 'garden_comment_reply',
+    user_active: 'user_active',
 };
 
 export const User = sqllize.define(tableName.user,
@@ -414,4 +415,18 @@ export const GardenCommentReply = sqllize.define(tableName.garden_comment_reply,
         },
     },
     {timestamps: false,tableName: tableName.garden_comment_reply},
+);
+
+export const UserActive = sqllize.define(tableName.user_active,
+    {
+        username: {
+            type: DataTypes.STRING,
+            primaryKey: true,
+        },
+        noticetime: {
+            type: DataTypes.DATE,
+            allowNull: false,
+        },
+    },
+    {timestamps: false,tableName: tableName.user_active},
 );

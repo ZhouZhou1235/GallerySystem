@@ -1,7 +1,7 @@
 // 控制器
 
 import express from 'express';
-import { Board, Gallery, GalleryComment, GalleryPaw, GalleryStar, Garden, GardenComment, GardenCommentReply, GardenPaw, GardenStar, Tag, TagGallery, TagGarden, User, UserWatch } from './database/models.js';
+import { Board, Gallery, GalleryComment, GalleryPaw, GalleryStar, Garden, GardenComment, GardenCommentReply, GardenPaw, GardenStar, Tag, TagGallery, TagGarden, User, UserActive, UserWatch } from './database/models.js';
 import { checkObjComplete, comparePasswordHash, compressImage, createPasswordHash, createRandomID, getExtension, isEqualObj, modelListToObjList } from './utils.js';
 import { addTagsForArtwork, addTagsForPlantpot, getDBRecordCount, imageCompressToSave } from './work.js';
 import config from '../config.js';
@@ -9,6 +9,7 @@ import sqllize from './database/orm_sequelize.js';
 import { sendAMail } from './mailer.js';
 import fs from 'fs';
 import { console } from 'inspector';
+import { Op } from 'sequelize';
 
 // 访问规则表
 const routeTable = { 
@@ -69,6 +70,7 @@ const routeTable = {
     editPlantpot: '/core/editPlantpot',
     deleteArtwork: '/core/deleteArtwork',
     deletePlantpot: '/core/deletePlantpot',
+    getUserNoticePawArtwork: '/core/getUserNoticePawArtwork',
 };
 
 // 加载控制器
@@ -143,7 +145,7 @@ export function loadMachineController(machine=express()){
             let data = await Tag.findAll({limit:Number(num),offset:Number(begin),order:[['time','DESC']]});
             res.send(data)
         })()
-    })
+    });
     machine.get(routeTable.getBoradMessages,(req,res)=>{ // 获取留言板信息
         let begin = req.query.begin;
         let num = req.query.num;
@@ -241,11 +243,11 @@ export function loadMachineController(machine=express()){
             }
             catch(e){console.log(e);res.send(0);}
         })()
-    })
+    });
     machine.get(routeTable.getCommentGalleryCount,(req,res)=>{ // 获取有关作品评论的数量
         let id = req.query.id;
         GalleryComment.count({where:{galleryid:id}}).then(count=>{res.send(count);});
-    })
+    });
     machine.get(routeTable.getArtworkPawAreaInfo,(req,res)=>{ // 获取作品印爪空间情况
         let id = req.query.id;
         let username = req.session.username;
@@ -277,18 +279,26 @@ export function loadMachineController(machine=express()){
                 artworknum: await Gallery.count({where:{username:username}}),
                 plantpotnum: await Garden.count({where:{username:username}}),
                 gotpawnum: await (async()=>{
-                    // 复杂查询 获得的总印爪数
-                    // todo 盆栽和叶子的印爪
                     let gotpawnum = 0;
                     let artworkList = await Gallery.findAll({where:{username:username}});
-                    let artworkCommentList = await GalleryComment.findAll({where:{username:username}});
                     for(let i=0;i<artworkList.length;i++){
                         let galleryid = artworkList[i]['id'];
                         gotpawnum += await GalleryPaw.count({where:{galleryid:galleryid,commentid:null}});
                     }
+                    let artworkCommentList = await GalleryComment.findAll({where:{username:username}});
                     for(let i=0;i<artworkCommentList.length;i++){
                         let gallerycommentid = artworkCommentList[i]['id'];
                         gotpawnum += await GalleryPaw.count({where:{commentid:gallerycommentid}});
+                    }
+                    let plantpotList = await Garden.findAll({where:{username:username}});
+                    for(let i=0;i<plantpotList.length;i++){
+                        let gardenid = plantpotList[i]['id'];
+                        gotpawnum += await GardenPaw.count({where:{gardenid:gardenid,commentid:null}});
+                    }
+                    let plantpotCommentList = await GardenComment.findAll({where:{username:username}});
+                    for(let i=0;i<plantpotCommentList.length;i++){
+                        let plantpotcommentid = plantpotCommentList[i]['id'];
+                        gotpawnum += await GalleryPaw.count({where:{commentid:plantpotcommentid}});
                     }
                     return gotpawnum;
                 })(),
@@ -361,11 +371,11 @@ export function loadMachineController(machine=express()){
             }
             catch(e){console.log(e);res.send(0);}
         })()
-    })
+    });
     machine.get(routeTable.getCommentGardenCount,(req,res)=>{ // 获取有关盆栽的叶子数量
         let id = req.query.id;
         GardenComment.count({where:{gardenid:id}}).then(count=>{res.send(count);});
-    })
+    });
     machine.get(routeTable.getPlantpotPawAreaInfo,(req,res)=>{ // 获取盆栽印爪空间情况
         let id = req.query.id;
         let username = req.session.username;
@@ -506,6 +516,40 @@ export function loadMachineController(machine=express()){
             res.send(result);
         })()
     });
+    machine.get(routeTable.getUserNoticePawArtwork,(req,res)=>{ // 获取用户的作品印爪
+        let username = req.query.username;
+        if(!username){res.send(0);return;}
+        (async()=>{
+            let useractive = await UserActive.findOne({where:{username:username}});
+            let noticetime = useractive.noticetime;
+            let artworkList = await Gallery.findAll({where:{username:username}});
+            let result = [];
+            for(let i=0;i<artworkList.length;i++){
+                let galleryid = artworkList[i]['id'];
+                GalleryPaw.belongsTo(User,{foreignKey:'username',targetKey:'username'});
+                let gallerypaw = await GalleryPaw.findAll({
+                    where:{
+                        galleryid:galleryid,
+                        commentid:null,
+                        time:{[Op.gte]:noticetime},
+                    },
+                    include:[{model: User}],
+                });
+                for(let j=0;j<gallerypaw.length;j++){
+                    let obj = {
+                        id: gallerypaw[j].id,
+                        user: gallerypaw[j].user,
+                        galleryid: galleryid,
+                        filename: artworkList[i]['filename'],
+                        title: artworkList[i]['title'],
+                        time: gallerypaw[j].time,
+                    }
+                    result.push(obj);
+                }
+            }
+            res.send(result);
+        })();
+    });
     // POST
     machine.post(routeTable.checkLogin,(req,res)=>{ // 检查登录
         if(req.session.username){res.send(1);}else{res.send(0);}
@@ -604,6 +648,10 @@ export function loadMachineController(machine=express()){
                         name: name,
                         email: email,
                         jointime: Date(),
+                    },{ transaction:t });
+                    await UserActive.create({
+                        username: username,
+                        noticetime: Date(),
                     },{ transaction:t });
                 });
                 req.session['username'] = username;
