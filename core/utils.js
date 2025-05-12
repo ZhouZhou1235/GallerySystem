@@ -3,6 +3,7 @@
 import bcrypt from "bcryptjs";
 import sharp from "sharp";
 import config  from "../config.js";
+import moment from "moment";
 
 // bcrypt 密码哈希
 export function createPasswordHash(password){
@@ -59,3 +60,15 @@ export function modelListToObjList(data=[]){
 
 // 生成随机数字号码
 export function createRandomID(lengthnum=10){return Math.floor(Math.pow(10,lengthnum)*Math.random())}
+
+// 获取一个指定时间的moment对象
+export function createMomentByDate(date=new Date()){
+    let time = moment();
+    time.year(date.getFullYear());
+    time.month(date.getMonth());
+    time.date(date.getDate());
+    time.hour(date.getHours());
+    time.minutes(date.getMinutes());
+    time.seconds(date.getSeconds());
+    return time;
+}

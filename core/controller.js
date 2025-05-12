@@ -2,7 +2,7 @@
 
 import express from 'express';
 import { Board, Gallery, GalleryComment, GalleryPaw, GalleryStar, Garden, GardenComment, GardenCommentReply, GardenPaw, GardenStar, Tag, TagGallery, TagGarden, User, UserActive, UserWatch } from './database/models.js';
-import { checkObjComplete, comparePasswordHash, compressImage, createPasswordHash, createRandomID, getExtension, isEqualObj, modelListToObjList } from './utils.js';
+import { checkObjComplete, comparePasswordHash, compressImage, createMomentByDate, createPasswordHash, createRandomID, getExtension, isEqualObj, modelListToObjList } from './utils.js';
 import { addTagsForArtwork, addTagsForPlantpot, getDBRecordCount, imageCompressToSave } from './work.js';
 import config from '../config.js';
 import sqllize from './database/orm_sequelize.js';
@@ -10,6 +10,7 @@ import { sendAMail } from './mailer.js';
 import fs from 'fs';
 import { console } from 'inspector';
 import { Op } from 'sequelize';
+import moment from 'moment';
 
 // 访问规则表
 const routeTable = { 
@@ -71,6 +72,12 @@ const routeTable = {
     deleteArtwork: '/core/deleteArtwork',
     deletePlantpot: '/core/deletePlantpot',
     getUserNoticePawArtwork: '/core/getUserNoticePawArtwork',
+    getUserNoticePawPlantpot: '/core/getUserNoticePawPlantpot',
+    getUserNoticeTextEcho: '/core/getUserNoticeTextEcho',
+    getUserNoticeWatcher: '/core/getUserNoticeWatcher',
+    noticeFinishRead: '/core/noticeFinishRead',
+    noticeNotRead: '/core/noticeNotRead',
+    getNoticenum: '/core/getNoticenum',
 };
 
 // 加载控制器
@@ -298,7 +305,7 @@ export function loadMachineController(machine=express()){
                     let plantpotCommentList = await GardenComment.findAll({where:{username:username}});
                     for(let i=0;i<plantpotCommentList.length;i++){
                         let plantpotcommentid = plantpotCommentList[i]['id'];
-                        gotpawnum += await GalleryPaw.count({where:{commentid:plantpotcommentid}});
+                        gotpawnum += await GardenPaw.count({where:{commentid:plantpotcommentid}});
                     }
                     return gotpawnum;
                 })(),
@@ -516,14 +523,17 @@ export function loadMachineController(machine=express()){
             res.send(result);
         })()
     });
-    machine.get(routeTable.getUserNoticePawArtwork,(req,res)=>{ // 获取用户的作品印爪
+    machine.get(routeTable.getUserNoticePawArtwork,(req,res)=>{ // 获取用户通知 作品相关印爪
         let username = req.query.username;
         if(!username){res.send(0);return;}
         (async()=>{
             let useractive = await UserActive.findOne({where:{username:username}});
             let noticetime = useractive.noticetime;
+            let result = {
+                artwork: [],
+                artworkcomment: [],
+            };
             let artworkList = await Gallery.findAll({where:{username:username}});
-            let result = [];
             for(let i=0;i<artworkList.length;i++){
                 let galleryid = artworkList[i]['id'];
                 GalleryPaw.belongsTo(User,{foreignKey:'username',targetKey:'username'});
@@ -544,10 +554,231 @@ export function loadMachineController(machine=express()){
                         title: artworkList[i]['title'],
                         time: gallerypaw[j].time,
                     }
-                    result.push(obj);
+                    result.artwork.push(obj);
+                }
+            }
+            let artworkcommentList = await GalleryComment.findAll({where:{username:username}});
+            for(let i=0;i<artworkcommentList.length;i++){
+                let commentid = artworkcommentList[i]['id'];
+                GalleryPaw.belongsTo(User,{foreignKey:'username',targetKey:'username'});
+                let gallerypaw = await GalleryPaw.findAll({
+                    where:{
+                        commentid: commentid,
+                        time:{[Op.gte]:noticetime},
+                    },
+                    include:[{model: User}],
+                });
+                for(let j=0;j<gallerypaw.length;j++){
+                    let obj = {
+                        id: gallerypaw[j].id,
+                        user: gallerypaw[j].user,
+                        galleryid: gallerypaw[j].galleryid,
+                        content: artworkcommentList[i].content,
+                        time: gallerypaw[j].time,
+                    }
+                    result.artworkcomment.push(obj);
                 }
             }
             res.send(result);
+        })();
+    });
+    machine.get(routeTable.getUserNoticePawPlantpot,(req,res)=>{ // 获取用户通知 盆栽相关印爪
+        let username = req.query.username;
+        if(!username){res.send(0);return;}
+        (async()=>{
+            let useractive = await UserActive.findOne({where:{username:username}});
+            let noticetime = useractive.noticetime;
+            let result = {
+                plantpot: [],
+                plantpotcomment: [],
+            };
+            let plantpotList = await Garden.findAll({where:{username:username}});
+            for(let i=0;i<plantpotList.length;i++){
+                let gardenid = plantpotList[i]['id'];
+                GardenPaw.belongsTo(User,{foreignKey:'username',targetKey:'username'});
+                let gardenpaw = await GardenPaw.findAll({
+                    where:{
+                        gardenid:gardenid,
+                        commentid:null,
+                        time:{[Op.gte]:noticetime},
+                    },
+                    include:[{model: User}],
+                });
+                for(let j=0;j<gardenpaw.length;j++){
+                    let obj = {
+                        id: gardenpaw[j].id,
+                        user: gardenpaw[j].user,
+                        gardenid: gardenid,
+                        filename: plantpotList[i]['filename'],
+                        title: plantpotList[i]['title'],
+                        time: gardenpaw[j].time,
+                    }
+                    result.plantpot.push(obj);
+                }
+            }
+            let plantpotcommentList = await GardenComment.findAll({where:{username:username}});
+            for(let i=0;i<plantpotcommentList.length;i++){
+                let commentid = plantpotcommentList[i]['id'];
+                GardenPaw.belongsTo(User,{foreignKey:'username',targetKey:'username'});
+                let plantpotpaw = await GardenPaw.findAll({
+                    where:{
+                        commentid: commentid,
+                        time:{[Op.gte]:noticetime},
+                    },
+                    include:[{model: User}],
+                });
+                for(let j=0;j<plantpotpaw.length;j++){
+                    let obj = {
+                        id: plantpotpaw[j].id,
+                        user: plantpotpaw[j].user,
+                        gardenid: plantpotpaw[j].gardenid,
+                        content: plantpotcommentList[i].content,
+                        time: plantpotpaw[j].time,
+                    }
+                    result.plantpotcomment.push(obj);
+                }
+            }
+            res.send(result);
+        })();
+    });
+    machine.get(routeTable.getUserNoticeTextEcho,(req,res)=>{ // 获取用户通知 文字回应
+        let username = req.query.username;
+        if(!username){res.send(0);return;}
+        (async()=>{
+            let useractive = await UserActive.findOne({where:{username:username}});
+            let noticetime = useractive.noticetime;
+            let result = {
+                artworkcomment: [],
+                plantpotcomment: [],
+                plantpotcommentreply: [],
+            };
+            let artworkList = await Gallery.findAll({where:{username:username}});
+            for(let i=0;i<artworkList.length;i++){
+                let galleryid = artworkList[i]['id'];
+                GalleryComment.belongsTo(User,{foreignKey:'username',targetKey:'username'});
+                let gallerycomment = await GalleryComment.findAll({
+                    where:{
+                        galleryid:galleryid,
+                        time:{[Op.gte]:noticetime},
+                    },
+                    include:[{model: User}],
+                });
+                for(let j=0;j<gallerycomment.length;j++){
+                    let obj = {
+                        id: gallerycomment[j].id,
+                        user: gallerycomment[j].user,
+                        galleryid: galleryid,
+                        filename: artworkList[i]['filename'],
+                        title: artworkList[i]['title'],
+                        content: gallerycomment[j].content,
+                        time: gallerycomment[j].time,
+                    }
+                    result.artworkcomment.push(obj);
+                }
+            }
+            let plantpotList = await Garden.findAll({where:{username:username}});
+            for(let i=0;i<plantpotList.length;i++){
+                let gardenid = plantpotList[i]['id'];
+                GardenComment.belongsTo(User,{foreignKey:'username',targetKey:'username'});
+                let gardencomment = await GardenComment.findAll({
+                    where:{
+                        gardenid:gardenid,
+                        time:{[Op.gte]:noticetime},
+                    },
+                    include:[{model: User}],
+                });
+                for(let j=0;j<gardencomment.length;j++){
+                    let obj = {
+                        id: gardencomment[j].id,
+                        user: gardencomment[j].user,
+                        gardenid: gardenid,
+                        filename: plantpotList[i]['filename'],
+                        title: plantpotList[i]['title'],
+                        content: gardencomment[j].content,
+                        time: gardencomment[j].time,
+                    }
+                    result.plantpotcomment.push(obj);
+                }
+            }
+            let plantpotcommentList = await GardenComment.findAll({where:{username:username}});
+            for(let i=0;i<plantpotcommentList.length;i++){
+                let commentid = plantpotcommentList[i]['id'];
+                GardenCommentReply.belongsTo(User,{foreignKey:'username',targetKey:'username'});
+                let gardencommentreply = await GardenCommentReply.findAll({
+                    where:{
+                        commentid:commentid,
+                        time:{[Op.gte]:noticetime},
+                    },
+                    include:[{model: User}],
+                });
+                for(let j=0;j<gardencommentreply.length;j++){
+                    let obj = {
+                        id: gardencommentreply[j].id,
+                        user: gardencommentreply[j].user,
+                        commentid: commentid,
+                        gardenid: plantpotcommentList[i]['gardenid'],
+                        content: gardencommentreply[j].content,
+                        time: gardencommentreply[j].time,
+                    }
+                    result.plantpotcommentreply.push(obj);
+                }
+            }
+            res.send(result);
+        })();
+    });
+    machine.get(routeTable.getUserNoticeWatcher,(req,res)=>{ // 获取用户通知 新增粉丝
+        let username = req.query.username;
+        if(!username){res.send(0);return;}
+        (async()=>{
+            let useractive = await UserActive.findOne({where:{username:username}});
+            let noticetime = useractive.noticetime;
+            UserWatch.belongsTo(User,{foreignKey:'watcher',targetKey:'username'});
+            let userwatch = await UserWatch.findAll({
+                where:{
+                    username:username,
+                    time:{[Op.gte]:noticetime},
+                },
+                include: [{model:User}],
+            });
+            res.send(userwatch);
+        })();
+    });
+    machine.get(routeTable.getNoticenum,(req,res)=>{ // 获取用户的消息通知数
+        let username = req.query.username;
+        if(!username){res.send(0);return;}
+        (async()=>{
+            let useractive = await UserActive.findOne({where:{username:username}});
+            let noticetime = useractive.noticetime;
+            let count = 0;
+            count += await UserWatch.count({where:{username:username,time:{[Op.gte]:noticetime}}});
+            count += await (async()=>{
+                let gotnum = 0;
+                let artworkList = await Gallery.findAll({where:{username:username}});
+                for(let i=0;i<artworkList.length;i++){
+                    let galleryid = artworkList[i]['id'];
+                    gotnum += await GalleryPaw.count({where:{galleryid:galleryid,commentid:null,time:{[Op.gte]:noticetime}}});
+                    gotnum += await GalleryComment.count({where:{galleryid:galleryid,time:{[Op.gte]:noticetime}}});
+                }
+                let artworkCommentList = await GalleryComment.findAll({where:{username:username}});
+                for(let i=0;i<artworkCommentList.length;i++){
+                    let gallerycommentid = artworkCommentList[i]['id'];
+                    gotnum += await GalleryPaw.count({where:{commentid:gallerycommentid,time:{[Op.gte]:noticetime}}});
+                }
+                let plantpotList = await Garden.findAll({where:{username:username}});
+                for(let i=0;i<plantpotList.length;i++){
+                    let gardenid = plantpotList[i]['id'];
+                    gotnum += await GardenPaw.count({where:{gardenid:gardenid,commentid:null,time:{[Op.gte]:noticetime}}});
+                    gotnum += await GardenComment.count({where:{gardenid:gardenid,time:{[Op.gte]:noticetime}}});
+                }
+                let plantpotCommentList = await GardenComment.findAll({where:{username:username}});
+                for(let i=0;i<plantpotCommentList.length;i++){
+                    let plantpotcommentid = plantpotCommentList[i]['id'];
+                    gotnum += await GardenPaw.count({where:{commentid:plantpotcommentid,time:{[Op.gte]:noticetime}}});
+                    gotnum += await GardenCommentReply.count({where:{commentid:plantpotcommentid,time:{[Op.gte]:noticetime}}})
+                }
+                return gotnum;
+            })()
+            res.send(count);
         })();
     });
     // POST
@@ -1282,6 +1513,42 @@ export function loadMachineController(machine=express()){
                     let filename = comment.filename;
                     if(filename){fs.unlinkSync(config.FILE_fileHub.garden+filename);}
                 }
+                res.send(1);
+            }
+            catch(e){console.log(e);res.send(0);}
+        })();
+    });
+    machine.post(routeTable.noticeFinishRead,(req,res)=>{ // 完成消息阅读
+        let username = req.session.username;
+        if(!username){res.send(0);return;}
+        (async()=>{
+            try{
+                sqllize.transaction(async t=>{
+                    await UserActive.update(
+                        {noticetime:Date()},
+                        {where:{username:username}},
+                        { transaction:t },
+                    );
+                });
+                res.send(1);
+            }
+            catch(e){console.log(e);res.send(0);}
+        })();
+    });
+    machine.post(routeTable.noticeNotRead,(req,res)=>{ // 回看之前的消息
+        let username = req.session.username;
+        if(!username){res.send(0);return;}
+        (async()=>{
+            try{
+                let useractive = await UserActive.findOne({where:{username:username}});
+                let theTime = createMomentByDate(new Date(useractive.noticetime)).subtract(1,'months').toDate();
+                sqllize.transaction(async t=>{
+                    await UserActive.update(
+                        {noticetime:theTime},
+                        {where:{username:username}},
+                        { transaction:t },
+                    );
+                });
                 res.send(1);
             }
             catch(e){console.log(e);res.send(0);}
