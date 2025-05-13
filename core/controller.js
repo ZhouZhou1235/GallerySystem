@@ -10,10 +10,9 @@ import { sendAMail } from './mailer.js';
 import fs from 'fs';
 import { console } from 'inspector';
 import { Op } from 'sequelize';
-import moment from 'moment';
 
 // 访问规则表
-const routeTable = { 
+const routeTable = {
     root: '/',
     files_gallery: '/files/gallery/:filename',
     files_headimage: '/files/headimage/:filename',
@@ -78,6 +77,12 @@ const routeTable = {
     noticeFinishRead: '/core/noticeFinishRead',
     noticeNotRead: '/core/noticeNotRead',
     getNoticenum: '/core/getNoticenum',
+    getUserTrendUsers: '/core/getUserTrendUsers',
+    trendFinishRead: '/core/trendFinishRead',
+    trendNotRead: '/core/trendNotRead',
+    getTrendnum: '/core/getTrendnum',
+    getUserTrendArtworks: '/core/getUserTrendArtworks',
+    getUserTrendPlantpots: '/core/getUserTrendPlantpots',
 };
 
 // 加载控制器
@@ -118,11 +123,11 @@ export function loadMachineController(machine=express()){
     // GET
     machine.get(routeTable.getUser,(req,res)=>{ // 获取用户
         let username = req.params.username;if(!username){return 0;}
-        User.findOne({where:{username:username}}).then(data=>{res.send(data);});
+        User.findOne({where:{username:username},attributes:{exclude:['password']}}).then(data=>{res.send(data);});
     });
     machine.get(routeTable.getSessionUser,(req,res)=>{ // 获取用户自己
         let username = req.session.username;if(!username){return 0;}
-        User.findOne({where:{username:username}}).then(data=>{res.send(data);});
+        User.findOne({where:{username:username},attributes:{exclude:['password']}}).then(data=>{res.send(data);});
     });
     machine.get(routeTable.getArtworks,(req,res)=>{ // 获取作品
         let begin = req.query.begin;
@@ -543,7 +548,8 @@ export function loadMachineController(machine=express()){
                         commentid:null,
                         time:{[Op.gte]:noticetime},
                     },
-                    include:[{model: User}],
+                    order:[['time','DESC']],
+                    include:[{model: User,attributes:{exclude:['password']}}],
                 });
                 for(let j=0;j<gallerypaw.length;j++){
                     let obj = {
@@ -566,7 +572,8 @@ export function loadMachineController(machine=express()){
                         commentid: commentid,
                         time:{[Op.gte]:noticetime},
                     },
-                    include:[{model: User}],
+                    order:[['time','DESC']],
+                    include:[{model: User,attributes:{exclude:['password']}}],
                 });
                 for(let j=0;j<gallerypaw.length;j++){
                     let obj = {
@@ -602,7 +609,8 @@ export function loadMachineController(machine=express()){
                         commentid:null,
                         time:{[Op.gte]:noticetime},
                     },
-                    include:[{model: User}],
+                    order:[['time','DESC']],
+                    include:[{model: User,attributes:{exclude:['password']}}],
                 });
                 for(let j=0;j<gardenpaw.length;j++){
                     let obj = {
@@ -625,7 +633,8 @@ export function loadMachineController(machine=express()){
                         commentid: commentid,
                         time:{[Op.gte]:noticetime},
                     },
-                    include:[{model: User}],
+                    order:[['time','DESC']],
+                    include:[{model: User,attributes:{exclude:['password']}}],
                 });
                 for(let j=0;j<plantpotpaw.length;j++){
                     let obj = {
@@ -661,7 +670,8 @@ export function loadMachineController(machine=express()){
                         galleryid:galleryid,
                         time:{[Op.gte]:noticetime},
                     },
-                    include:[{model: User}],
+                    order:[['time','DESC']],
+                    include:[{model: User,attributes:{exclude:['password']}}],
                 });
                 for(let j=0;j<gallerycomment.length;j++){
                     let obj = {
@@ -685,7 +695,8 @@ export function loadMachineController(machine=express()){
                         gardenid:gardenid,
                         time:{[Op.gte]:noticetime},
                     },
-                    include:[{model: User}],
+                    order:[['time','DESC']],
+                    include:[{model: User,attributes:{exclude:['password']}}],
                 });
                 for(let j=0;j<gardencomment.length;j++){
                     let obj = {
@@ -709,7 +720,8 @@ export function loadMachineController(machine=express()){
                         commentid:commentid,
                         time:{[Op.gte]:noticetime},
                     },
-                    include:[{model: User}],
+                    order:[['time','DESC']],
+                    include:[{model: User,attributes:{exclude:['password']}}],
                 });
                 for(let j=0;j<gardencommentreply.length;j++){
                     let obj = {
@@ -738,7 +750,11 @@ export function loadMachineController(machine=express()){
                     username:username,
                     time:{[Op.gte]:noticetime},
                 },
-                include: [{model:User}],
+                order:[['time','DESC']],
+                include: [{
+                    model: User,
+                    attributes: {exclude:['password']},
+                }],
             });
             res.send(userwatch);
         })();
@@ -780,6 +796,90 @@ export function loadMachineController(machine=express()){
             })()
             res.send(count);
         })();
+    });
+    machine.get(routeTable.getUserTrendUsers,(req,res)=>{ // 获取用户动态列表
+        let username = req.session.username;
+        if(!username){res.send(0);return;}
+        (async()=>{
+            let myuseractive = await UserActive.findOne({where:{username:username}});
+            let trendstime = myuseractive.trendstime;
+            UserActive.belongsTo(UserWatch,{foreignKey:'username',targetKey:'username'});
+            UserActive.belongsTo(User,{foreignKey:'username',targetKey:'username'});
+            let useractive = await UserActive.findAll({
+                where: {mediatime:{[Op.gte]:trendstime}},
+                include: [
+                    {
+                        model: UserWatch,
+                        where: {watcher:username},
+                    },
+                    {
+                        model: User,
+                        attributes: {exclude:['password']}
+                    },
+                ]
+            });
+            let result = []
+            for(let i=0;i<useractive.length;i++){
+                let obj = {
+                    username: useractive[i].user.username,
+                    name: useractive[i].user.name,
+                    sex: useractive[i].user.sex,
+                    species: useractive[i].user.species,
+                    headimage: useractive[i].user.headimage,
+                    mediatime: useractive[i].mediatime,
+                }
+                result.push(obj)
+            }
+            res.send(result);
+        })();
+    });
+    machine.get(routeTable.getTrendnum,(req,res)=>{ // 获取用户动态数
+        let username = req.query.username;
+        if(!username){res.send(0);return;}
+        (async()=>{
+            let myuseractive = await UserActive.findOne({where:{username:username}});
+            let trendstime = myuseractive.trendstime;
+            UserActive.belongsTo(UserWatch,{foreignKey:'username',targetKey:'username'});
+            let count = await UserActive.count({
+                where: {mediatime:{[Op.gte]:trendstime}},
+                include: [{model: UserWatch,where: {watcher:username}}]
+            });
+            res.send(count);
+        })();
+    });
+    machine.get(routeTable.getUserTrendArtworks,(req,res)=>{ // 获取用户动态提及用户的作品
+        let username = req.query.username;
+        let myUsername = req.session.username;
+        if(!username || !myUsername){res.send(0);return;}
+        (async ()=>{
+            let myuseractive = await UserActive.findOne({where:{username:myUsername}});
+            let trendstime = myuseractive.trendstime;
+            let data = await Gallery.findAll({
+                order:[['time','DESC']],
+                where:{
+                    username: username,
+                    time: {[Op.gte]:trendstime},
+                },
+            });
+            res.send(data);
+        })()
+    });
+    machine.get(routeTable.getUserTrendPlantpots,(req,res)=>{ // 获取用户动态提及用户的盆栽
+        let username = req.query.username;
+        let myUsername = req.session.username;
+        if(!username || !myUsername){res.send(0);return;}
+        (async ()=>{
+            let myuseractive = await UserActive.findOne({where:{username:myUsername}});
+            let trendstime = myuseractive.trendstime;
+            let data = await Garden.findAll({
+                order:[['updatetime','DESC']],
+                where:{
+                    username: username,
+                    updatetime: {[Op.gte]:trendstime},
+                },
+            });
+            res.send(data);
+        })()
     });
     // POST
     machine.post(routeTable.checkLogin,(req,res)=>{ // 检查登录
@@ -826,6 +926,7 @@ export function loadMachineController(machine=express()){
                     info: info,
                     time: Date(),
                 },{ transaction:t });
+                await UserActive.update({mediatime:Date()},{where:{username:username}},{transaction:t});
                 if(tags){
                     let tagList = JSON.parse(tags);
                     addTagsForArtwork(tagList);
@@ -883,6 +984,8 @@ export function loadMachineController(machine=express()){
                     await UserActive.create({
                         username: username,
                         noticetime: Date(),
+                        trendstime: Date(),
+                        mediatime: Date(),
                     },{ transaction:t });
                 });
                 req.session['username'] = username;
@@ -964,6 +1067,7 @@ export function loadMachineController(machine=express()){
                     createtime: Date(),
                     updatetime: Date(),
                 },{ transaction:t });
+                await UserActive.update({mediatime:Date()},{where:{username:username}},{transaction:t});
                 if(tags){
                     let tagList = JSON.parse(tags);
                     await addTagsForPlantpot(id,tagList);
@@ -1384,6 +1488,9 @@ export function loadMachineController(machine=express()){
                         {where:{id:gardenid}},
                         { transaction:t },
                     );
+                    if(await Garden.findOne({where:{username:username,id:gardenid}})){
+                        await UserActive.update({mediatime:Date()},{where:{username:username}},{transaction:t});
+                    }
                     res.send(1);
                 });
             }
@@ -1545,6 +1652,42 @@ export function loadMachineController(machine=express()){
                 sqllize.transaction(async t=>{
                     await UserActive.update(
                         {noticetime:theTime},
+                        {where:{username:username}},
+                        { transaction:t },
+                    );
+                });
+                res.send(1);
+            }
+            catch(e){console.log(e);res.send(0);}
+        })();
+    });
+    machine.post(routeTable.trendFinishRead,(req,res)=>{ // 完成动态阅读
+        let username = req.session.username;
+        if(!username){res.send(0);return;}
+        (async()=>{
+            try{
+                sqllize.transaction(async t=>{
+                    await UserActive.update(
+                        {trendstime:Date()},
+                        {where:{username:username}},
+                        { transaction:t },
+                    );
+                });
+                res.send(1);
+            }
+            catch(e){console.log(e);res.send(0);}
+        })();
+    });
+    machine.post(routeTable.trendNotRead,(req,res)=>{ // 回看之前的动态
+        let username = req.session.username;
+        if(!username){res.send(0);return;}
+        (async()=>{
+            try{
+                let useractive = await UserActive.findOne({where:{username:username}});
+                let theTime = createMomentByDate(new Date(useractive.trendstime)).subtract(1,'months').toDate();
+                sqllize.transaction(async t=>{
+                    await UserActive.update(
+                        {trendstime:theTime},
                         {where:{username:username}},
                         { transaction:t },
                     );

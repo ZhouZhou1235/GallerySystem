@@ -427,6 +427,14 @@ export const UserActive = sqllize.define(tableName.user_active,
             type: DataTypes.DATE,
             allowNull: false,
         },
+        trendstime: {
+            type: DataTypes.DATE,
+            allowNull: false,
+        },
+        mediatime: {
+            type: DataTypes.DATE,
+            allowNull: false,
+        },
     },
     {timestamps: false,tableName: tableName.user_active},
 );
