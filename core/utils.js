@@ -72,3 +72,32 @@ export function createMomentByDate(date=new Date()){
     time.seconds(date.getSeconds());
     return time;
 }
+
+// 将字符串按指定字符分为数组
+export function explodeText(text='',c=' '){
+    let result = [];
+    let indexA = 0;
+    let indexB = 0;
+    let getword = false;
+    for(let i=0;i<text.length;i++){
+        if(!getword){
+            if(text[i]!=c){
+                indexA = i;
+                getword = true;
+            }
+        }
+        else{
+            if(text[i]==c){
+                indexB = i;
+                result.push(text.substring(indexA,indexB));
+                indexA = indexB;
+                getword = false;
+            }
+        }
+    }
+    if(getword){
+        indexB = text.length;
+        result.push(text.substring(indexA,indexB));
+    }
+    return result;
+}

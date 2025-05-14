@@ -2,7 +2,7 @@
 
 import express from 'express';
 import { Board, Gallery, GalleryComment, GalleryPaw, GalleryStar, Garden, GardenComment, GardenCommentReply, GardenPaw, GardenStar, Tag, TagGallery, TagGarden, User, UserActive, UserWatch } from './database/models.js';
-import { checkObjComplete, comparePasswordHash, compressImage, createMomentByDate, createPasswordHash, createRandomID, getExtension, isEqualObj, modelListToObjList } from './utils.js';
+import { checkObjComplete, comparePasswordHash, compressImage, createMomentByDate, createPasswordHash, createRandomID, explodeText, getExtension, isEqualObj, modelListToObjList } from './utils.js';
 import { addTagsForArtwork, addTagsForPlantpot, getDBRecordCount, imageCompressToSave } from './work.js';
 import config from '../config.js';
 import sqllize from './database/orm_sequelize.js';
@@ -83,6 +83,9 @@ const routeTable = {
     getTrendnum: '/core/getTrendnum',
     getUserTrendArtworks: '/core/getUserTrendArtworks',
     getUserTrendPlantpots: '/core/getUserTrendPlantpots',
+    searchTags: '/core/searchTags',
+    editTag: '/core/editTag',
+    deleteTag: '/core/deleteTag',
 };
 
 // 加载控制器
@@ -154,7 +157,21 @@ export function loadMachineController(machine=express()){
         if(!begin){begin=0;}
         if(!num){num=config.DATABASE_defaultLimit;}
         (async ()=>{
-            let data = await Tag.findAll({limit:Number(num),offset:Number(begin),order:[['time','DESC']]});
+            let data = await Tag.findAll({
+                limit: Number(num),
+                offset: Number(begin),
+                order: [['time','DESC']],
+            });
+            data = modelListToObjList(data);
+            for(let i=0;i<data.length;i++){
+                let usenum = await (async()=>{
+                    let num = 0;
+                    num += await TagGallery.count({where:{tagid:data[i]['id']}});
+                    num += await TagGarden.count({where:{tagid:data[i]['id']}});
+                    return num;
+                })()
+                data[i]['usenum'] = usenum;
+            }
             res.send(data)
         })()
     });
@@ -881,6 +898,43 @@ export function loadMachineController(machine=express()){
             res.send(data);
         })()
     });
+    machine.get(routeTable.searchTags,(req,res)=>{ // 搜索标签
+        let tagtext = req.query.tagtext;
+        if(!tagtext){res.send(0);return;}
+        (async()=>{
+            let result = [];
+            let tagList = explodeText(tagtext);
+            for(let i=0;i<tagList.length;i++){
+                let tag = tagList[i];
+                let theTags = await Tag.findAll({where:{tag:{[Op.like]:`%${tag}%`}}});
+                if(theTags){
+                    for(let j=0;j<theTags.length;j++){
+                        result.push(theTags[j]);
+                    }
+                }
+            }
+            result = modelListToObjList(result);
+            for(let i=0;i<result.length;i++){
+                let usenum = await (async()=>{
+                    let num = 0;
+                    num += await TagGallery.count({where:{tagid:result[i]['id']}});
+                    num += await TagGarden.count({where:{tagid:result[i]['id']}});
+                    return num;
+                })()
+                result[i]['usenum'] = usenum;
+            }
+            // 过滤重复值
+            let tagidList = [];
+            let uniqueresult = [];
+            for(let i=0;i<result.length;i++){
+                if(!tagidList.find(id=>id==result[i]['id'])){
+                    tagidList.push(result[i]['id']);
+                    uniqueresult.push(result[i]);
+                }
+            }
+            res.send(uniqueresult);
+        })();
+    });
     // POST
     machine.post(routeTable.checkLogin,(req,res)=>{ // 检查登录
         if(req.session.username){res.send(1);}else{res.send(0);}
@@ -929,7 +983,7 @@ export function loadMachineController(machine=express()){
                 await UserActive.update({mediatime:Date()},{where:{username:username}},{transaction:t});
                 if(tags){
                     let tagList = JSON.parse(tags);
-                    addTagsForArtwork(tagList);
+                    addTagsForArtwork(id,tagList);
                 }
             });
             if(result){
@@ -1693,6 +1747,48 @@ export function loadMachineController(machine=express()){
                     );
                 });
                 res.send(1);
+            }
+            catch(e){console.log(e);res.send(0);}
+        })();
+    });
+    machine.post(routeTable.editTag,(req,res)=>{ // 修改标签
+        let id = req.body.id;
+        let info = req.body.info;
+        let type = req.body.type;
+        let username = req.session.username;
+        if(!id || !type || !username){res.send(0);return;}
+        (async()=>{
+            try{
+                sqllize.transaction(async t=>{
+                    await Tag.update(
+                        {info:info,type:type},
+                        {where:{id:id}},
+                        { transaction:t },
+                    );
+                });
+                res.send(1);
+            }
+            catch(e){console.log(e);res.send(0);}
+        })();
+    });
+    machine.post(routeTable.deleteTag,(req,res)=>{ // 删除标签 标记有一定数量则拒绝删除
+        let id = req.body.id;
+        let username = req.session.username;
+        if(!id || !username){res.send(0);return;}
+        (async()=>{
+            try{
+                let usenum = await Tag.count({where:{id,id}});
+                if(usenum<=10){
+                    sqllize.transaction(async t=>{
+                        await Tag.destroy({where:{id:id}},{transaction:t});
+                        await TagGallery.destroy({where:{tagid:id}},{transaction:t});
+                        await TagGarden.destroy({where:{tagid:id}},{transaction:t});
+                    });
+                    res.send(1);
+                }
+                else{
+                    res.send(0);
+                }
             }
             catch(e){console.log(e);res.send(0);}
         })();

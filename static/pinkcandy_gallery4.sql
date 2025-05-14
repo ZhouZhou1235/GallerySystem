@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- 主机： localhost
--- 生成日期： 2025-04-30 10:59:37
+-- 生成日期： 2025-05-13 18:11:50
 -- 服务器版本： 8.0.12
 -- PHP 版本： 7.3.9
 
@@ -153,9 +153,9 @@ CREATE TABLE `garden_comment_reply` (
 DROP TABLE IF EXISTS `garden_paw`;
 CREATE TABLE `garden_paw` (
   `Id` int(11) NOT NULL,
+  `username` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
   `gardenid` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
   `commentid` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL,
-  `username` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
   `time` datetime NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci ROW_FORMAT=COMPACT;
 
@@ -168,8 +168,8 @@ CREATE TABLE `garden_paw` (
 DROP TABLE IF EXISTS `garden_star`;
 CREATE TABLE `garden_star` (
   `id` int(11) NOT NULL,
-  `gardenid` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
   `username` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
+  `gardenid` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
   `time` datetime NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
@@ -232,6 +232,20 @@ CREATE TABLE `user` (
   `backimage` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL,
   `sex` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL,
   `species` varchar(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
+-- 表的结构 `user_active`
+--
+
+DROP TABLE IF EXISTS `user_active`;
+CREATE TABLE `user_active` (
+  `username` varchar(50) CHARACTER SET utf8 NOT NULL,
+  `noticetime` datetime NOT NULL,
+  `trendstime` datetime NOT NULL,
+  `mediatime` datetime NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- --------------------------------------------------------
@@ -335,6 +349,12 @@ ALTER TABLE `tag_garden`
 -- 表的索引 `user`
 --
 ALTER TABLE `user`
+  ADD PRIMARY KEY (`username`);
+
+--
+-- 表的索引 `user_active`
+--
+ALTER TABLE `user_active`
   ADD PRIMARY KEY (`username`);
 
 --
