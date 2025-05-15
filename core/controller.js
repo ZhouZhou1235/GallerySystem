@@ -1008,7 +1008,14 @@ export function loadMachineController(machine=express()){
         if(!checkObjComplete(loginForm)){res.send(0);return;}
         let username = loginForm.username;
         let password = loginForm.password;
-        User.findOne({where:{username:username}}).then(data=>{
+        User.findOne({
+            where:{
+                [Op.or]:[
+                    {username:username},
+                    {email:username},
+                ],
+            }
+        }).then(data=>{
             if(!data){res.send(0);return;}
             if(!comparePasswordHash(password,data.password)){res.send(0);return;}
             let session = req.session;
