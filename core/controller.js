@@ -1041,27 +1041,32 @@ export function loadMachineController(machine=express()){
         let saveFilename = id+'.'+ext;
         let savepath = config.FILE_fileHub.gallery+saveFilename;
         try{
-            // Sequelize 托管事务
-            let result = sqllize.transaction(async t=>{
-                await Gallery.create({
-                    id: id,
-                    username: username,
-                    filename: saveFilename,
-                    title: title,
-                    info: info,
-                    time: Date(),
-                },{ transaction:t });
-                await UserActive.update({mediatime:Date()},{where:{username:username}},{transaction:t});
-                if(tags){
-                    let tagList = JSON.parse(tags);
-                    addTagsForArtwork(id,tagList);
+            (async()=>{
+                let have = await Gallery.findOne({where:{id:id}})?true:false;
+                if(!have){
+                    let result = sqllize.transaction(async t=>{
+                        await Gallery.create({
+                            id: id,
+                            username: username,
+                            filename: saveFilename,
+                            title: title,
+                            info: info,
+                            time: Date(),
+                        },{ transaction:t });
+                        await UserActive.update({mediatime:Date()},{where:{username:username}},{transaction:t});
+                        if(tags){
+                            let tagList = JSON.parse(tags);
+                            addTagsForArtwork(id,tagList);
+                        }
+                    });
+                    if(result){
+                        await file.mv(savepath);
+                        await compressImage(savepath,config.FILE_fileHub.galleryPreview+saveFilename);
+                        res.send(1);
+                    }
                 }
-            });
-            if(result){
-                await file.mv(savepath);
-                await compressImage(savepath,config.FILE_fileHub.galleryPreview+saveFilename);
-                res.send(1);
-            }
+                else{res.send(0);}
+            })();
         }
         catch(e){console.log(e);res.send(0);}
     });
@@ -1099,22 +1104,35 @@ export function loadMachineController(machine=express()){
                 let name = registerForm.name;
                 let email = registerForm.email;
                 sqllize.transaction(async t=>{
-                    await User.create({
-                        username: username,
-                        password: passwordhash,
-                        name: name,
-                        email: email,
-                        jointime: Date(),
-                    },{ transaction:t });
-                    await UserActive.create({
-                        username: username,
-                        noticetime: Date(),
-                        trendstime: Date(),
-                        mediatime: Date(),
-                    },{ transaction:t });
+                    let have = await User.findOne({
+                        where:{
+                            [Op.or]: [
+                                {username: username},
+                                {email: email},
+                            ],
+                        }
+                    })?true:false;
+                    if(!have){
+                        await User.create({
+                            username: username,
+                            password: passwordhash,
+                            name: name,
+                            email: email,
+                            jointime: Date(),
+                        },{ transaction:t });
+                        await UserActive.create({
+                            username: username,
+                            noticetime: Date(),
+                            trendstime: Date(),
+                            mediatime: Date(),
+                        },{ transaction:t });
+                    }
+                    if(!have){
+                        req.session['username'] = username;
+                        res.send(1);
+                    }
+                    else{res.send(0);}
                 });
-                req.session['username'] = username;
-                res.send(1);
             }
             catch(e){console.log(e);res.send(0);}
         }
@@ -1174,33 +1192,39 @@ export function loadMachineController(machine=express()){
         let username = req.session.username;
         if(!title || !content || !username){res.send(0);return;}
         let saveFilename = null;
-        if(file){
-            let ext = getExtension(file.name);
-            saveFilename = id+'.'+ext;
-            let savepath = config.FILE_fileHub.garden+saveFilename;
-            if(!ext in config.FILE_imageAllowExtension){res.send(0);return;}
-            file.mv(savepath);
-        }
-        try{
-            let result = sqllize.transaction(async t=>{
-                await Garden.create({
-                    id: id,
-                    username: username,
-                    filename: saveFilename,
-                    title: title,
-                    content: content,
-                    createtime: Date(),
-                    updatetime: Date(),
-                },{ transaction:t });
-                await UserActive.update({mediatime:Date()},{where:{username:username}},{transaction:t});
-                if(tags){
-                    let tagList = JSON.parse(tags);
-                    await addTagsForPlantpot(id,tagList);
+        (async()=>{
+            let have = await Garden.findOne({where:{id:id}})?true:false;
+            if(!have){
+                if(file){
+                    let ext = getExtension(file.name);
+                    saveFilename = id+'.'+ext;
+                    let savepath = config.FILE_fileHub.garden+saveFilename;
+                    if(!ext in config.FILE_imageAllowExtension){res.send(0);return;}
+                    file.mv(savepath);
                 }
-            });
-            if(result){res.send(1);}
-        }
-        catch(e){console.log(e);res.send(0);}
+                try{
+                    let result = sqllize.transaction(async t=>{
+                        await Garden.create({
+                            id: id,
+                            username: username,
+                            filename: saveFilename,
+                            title: title,
+                            content: content,
+                            createtime: Date(),
+                            updatetime: Date(),
+                        },{ transaction:t });
+                        await UserActive.update({mediatime:Date()},{where:{username:username}},{transaction:t});
+                        if(tags){
+                            let tagList = JSON.parse(tags);
+                            await addTagsForPlantpot(id,tagList);
+                        }
+                    });
+                    if(result){res.send(1);}
+                }
+                catch(e){console.log(e);res.send(0);}
+            }
+            else{res.send(0);}
+        })();
     });
     machine.post(routeTable.addBoardMessage,(req,res)=>{ // 留言
         let username = req.session.username;
@@ -1384,19 +1408,25 @@ export function loadMachineController(machine=express()){
         let content = req.body.content;
         let time = Date();
         if(!galleryid || !username || !content){res.send(0);return;}
-        try{
-            sqllize.transaction(async (t)=>{
-                await GalleryComment.create({
-                    id: commentid,
-                    galleryid: galleryid,
-                    username: username,
-                    content: content,
-                    time: time,
-                },{ transaction:t });
-                res.send(1);
-            });
-        }
-        catch(e){console.log(e);res.send(0);};
+        (async()=>{
+            let have = await GalleryComment.findOne({where:{id:commentid}})?true:false;
+            if(!have){
+                try{
+                    sqllize.transaction(async (t)=>{
+                        await GalleryComment.create({
+                            id: commentid,
+                            galleryid: galleryid,
+                            username: username,
+                            content: content,
+                            time: time,
+                        },{ transaction:t });
+                        res.send(1);
+                    });
+                }
+                catch(e){console.log(e);res.send(0);};
+            }
+            else{res.send(0);}
+        })();
     });
     machine.post(routeTable.pawArtworkMedia,(req,res)=>{ // 作品印爪
         let username = req.session.username;
@@ -1591,35 +1621,39 @@ export function loadMachineController(machine=express()){
         let file = req.files?.file;
         if(!gardenid || !username || !content){res.send(0);return;}
         (async()=>{
-            try{
-                let filename;
-                if(file){
-                    filename = commentid+'.'+getExtension(file.name);
-                    let savepath = config.FILE_fileHub.garden+filename;
-                    let ok = await imageCompressToSave(file,savepath,512);
-                    if(!ok){res.send(0);return;}
-                }
-                sqllize.transaction(async (t)=>{
-                    await GardenComment.create({
-                        id: commentid,
-                        gardenid: gardenid,
-                        username: username,
-                        content: content,
-                        filename: filename?filename:null,
-                        time: Date(),
-                    },{ transaction:t });
-                    await Garden.update(
-                        {updatetime: Date()},
-                        {where:{id:gardenid}},
-                        { transaction:t },
-                    );
-                    if(await Garden.findOne({where:{username:username,id:gardenid}})){
-                        await UserActive.update({mediatime:Date()},{where:{username:username}},{transaction:t});
+            let have = await GardenComment.findOne({where:{id:commentid}})?true:false;
+            if(!have){
+                try{
+                    let filename;
+                    if(file){
+                        filename = commentid+'.'+getExtension(file.name);
+                        let savepath = config.FILE_fileHub.garden+filename;
+                        let ok = await imageCompressToSave(file,savepath,512);
+                        if(!ok){res.send(0);return;}
                     }
-                    res.send(1);
-                });
+                    sqllize.transaction(async (t)=>{
+                        await GardenComment.create({
+                            id: commentid,
+                            gardenid: gardenid,
+                            username: username,
+                            content: content,
+                            filename: filename?filename:null,
+                            time: Date(),
+                        },{ transaction:t });
+                        await Garden.update(
+                            {updatetime: Date()},
+                            {where:{id:gardenid}},
+                            { transaction:t },
+                        );
+                        if(await Garden.findOne({where:{username:username,id:gardenid}})){
+                            await UserActive.update({mediatime:Date()},{where:{username:username}},{transaction:t});
+                        }
+                        res.send(1);
+                    });
+                }
+                catch(e){console.log(e);res.send(0);};
             }
-            catch(e){console.log(e);res.send(0);};
+            else{res.send(0);}
         })();
     });
     machine.post(routeTable.editArtwork,(req,res)=>{ // 修改作品
