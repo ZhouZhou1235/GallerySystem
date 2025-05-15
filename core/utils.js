@@ -101,3 +101,27 @@ export function explodeText(text='',c=' '){
     }
     return result;
 }
+
+// 两数组的交集运算
+export function arrayIntersect(array1=[],array2=[],compareObj=false){
+    let intersection = []
+    for(let i=0;i<array1.length;i++){
+        if(
+            compareObj
+            ?
+            array2.find(e=>isEqualObj(e,array1[i]))
+            :
+            array2.find(e=>e==array1[i])
+        ){intersection.push(array1[i]);}
+    }
+    return intersection;
+}
+
+// 数组元素去重
+export function uniqueElementArray(array=[]){
+    let uniqueArray = [];
+    for(let i=0;i<array.length;i++){
+        if(!(uniqueArray.find(e=>e==array[i]))){uniqueArray.push(array[i]);}
+    }
+    return uniqueArray;
+}

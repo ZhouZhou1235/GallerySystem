@@ -3,7 +3,7 @@ import fs from 'fs';
 import config  from "../config.js";
 import sqllize from './database/orm_sequelize.js';
 import { GArea } from './ConstVars.js';
-import { compressImage, createRandomID, getExtension } from "./utils.js";
+import { compressImage, createRandomID, getExtension, modelListToObjList } from "./utils.js";
 
 // 获取数据表记录数
 export function getDBRecordCount(table=''){
@@ -108,4 +108,19 @@ export async function imageCompressToSave(file,savepath='',resizeNum=config.FILE
         return true;
     }
     catch(e){console.log(e);return false;}
+}
+
+// 为标签查询结果添加使用数
+export async function addUsenumForTagdatas(data=[]){
+    data = modelListToObjList(data);
+    for(let i=0;i<data.length;i++){
+        let usenum = await (async()=>{
+            let num = 0;
+            num += await TagGallery.count({where:{tagid:data[i]['id']}});
+            num += await TagGarden.count({where:{tagid:data[i]['id']}});
+            return num;
+        })()
+        data[i]['usenum'] = usenum;
+    }
+    return data;
 }

@@ -2,8 +2,8 @@
 
 import express from 'express';
 import { Board, Gallery, GalleryComment, GalleryPaw, GalleryStar, Garden, GardenComment, GardenCommentReply, GardenPaw, GardenStar, Tag, TagGallery, TagGarden, User, UserActive, UserWatch } from './database/models.js';
-import { checkObjComplete, comparePasswordHash, compressImage, createMomentByDate, createPasswordHash, createRandomID, explodeText, getExtension, isEqualObj, modelListToObjList } from './utils.js';
-import { addTagsForArtwork, addTagsForPlantpot, getDBRecordCount, imageCompressToSave } from './work.js';
+import { arrayIntersect, checkObjComplete, comparePasswordHash, compressImage, createMomentByDate, createPasswordHash, createRandomID, explodeText, getExtension, isEqualObj, modelListToObjList, uniqueElementArray } from './utils.js';
+import { addTagsForArtwork, addTagsForPlantpot, addUsenumForTagdatas, getDBRecordCount, imageCompressToSave } from './work.js';
 import config from '../config.js';
 import sqllize from './database/orm_sequelize.js';
 import { sendAMail } from './mailer.js';
@@ -86,6 +86,7 @@ const routeTable = {
     searchTags: '/core/searchTags',
     editTag: '/core/editTag',
     deleteTag: '/core/deleteTag',
+    searchPinkCandy: '/core/searchPinkCandy',
 };
 
 // 加载控制器
@@ -162,16 +163,7 @@ export function loadMachineController(machine=express()){
                 offset: Number(begin),
                 order: [['time','DESC']],
             });
-            data = modelListToObjList(data);
-            for(let i=0;i<data.length;i++){
-                let usenum = await (async()=>{
-                    let num = 0;
-                    num += await TagGallery.count({where:{tagid:data[i]['id']}});
-                    num += await TagGarden.count({where:{tagid:data[i]['id']}});
-                    return num;
-                })()
-                data[i]['usenum'] = usenum;
-            }
+            data = await addUsenumForTagdatas(data);
             res.send(data)
         })()
     });
@@ -231,6 +223,7 @@ export function loadMachineController(machine=express()){
                         },
                     ]
                 });
+                data = await addUsenumForTagdatas(data);
                 res.send(data);
             }
             catch(e){console.log(e);res.send(0);}
@@ -450,6 +443,7 @@ export function loadMachineController(machine=express()){
                         },
                     ]
                 });
+                data = await addUsenumForTagdatas(data);
                 res.send(data);
             }
             catch(e){console.log(e);res.send(0);}
@@ -913,16 +907,7 @@ export function loadMachineController(machine=express()){
                     }
                 }
             }
-            result = modelListToObjList(result);
-            for(let i=0;i<result.length;i++){
-                let usenum = await (async()=>{
-                    let num = 0;
-                    num += await TagGallery.count({where:{tagid:result[i]['id']}});
-                    num += await TagGarden.count({where:{tagid:result[i]['id']}});
-                    return num;
-                })()
-                result[i]['usenum'] = usenum;
-            }
+            result = await addUsenumForTagdatas(result);
             // 过滤重复值
             let tagidList = [];
             let uniqueresult = [];
@@ -933,6 +918,85 @@ export function loadMachineController(machine=express()){
                 }
             }
             res.send(uniqueresult);
+        })();
+    });
+    machine.get(routeTable.searchPinkCandy,(req,res)=>{ // 来点粉糖
+        let searchtext = req.query.searchtext;
+        if(!searchtext){res.send(0);return;}
+        let tagList = explodeText(searchtext);
+        let result = {
+            artwork: [],
+            plantpot: [],
+            user: [],
+        };
+        (async()=>{
+            let galleryidList = [];
+            let gardenidList = [];
+            let usernameList = [];
+            for(let i=0;i<tagList.length;i++){
+                let tag = tagList[i];
+                let tagobj = await Tag.findOne({where:{tag:tag}});
+                // 作品和盆栽的搜索 根据标签或内容模糊匹配
+                // 作品
+                if(tagobj){
+                    let tagid = tagobj['id'];
+                    let taggallery = await TagGallery.findAll({where:{tagid:tagid}});
+                    let theList = []
+                    for(let j=0;j<taggallery.length;j++){
+                        theList.push(taggallery[j]['galleryid'])
+                    }
+                    if(galleryidList.length==0){galleryidList=theList;}
+                    else{galleryidList=arrayIntersect(galleryidList,theList);}
+                }
+                let gallery = await Gallery.findAll({where:{title:{[Op.like]:`%${tag}%`}}});
+                for(let j=0;j<gallery.length;j++){galleryidList.push(gallery[j]['id']);}
+                // 盆栽
+                if(tagobj){
+                    let tagid = tagobj['id'];
+                    let taggarden = await TagGarden.findAll({where:{tagid:tagid}});
+                    let theList = []
+                    for(let j=0;j<taggarden.length;j++){
+                        theList.push(taggarden[j]['gardenid'])
+                    }
+                    if(gardenidList.length==0){gardenidList=theList;}
+                    else{gardenidList=arrayIntersect(gardenidList,theList);}
+                }
+                let garden = await Garden.findAll({
+                    where:{
+                        [Op.or]:[
+                            {title:{[Op.like]:`%${tag}%`}},
+                            {content:{[Op.like]:`%${tag}%`}},
+                        ],
+                    }
+                });
+                for(let j=0;j<garden.length;j++){gardenidList.push(garden[j]['id']);}
+                // 搜索用户 根据名字或粉糖账号
+                let user = await User.findAll({
+                    where:{
+                        [Op.or]: [
+                            {name:{[Op.like]:`%${tag}%`}},
+                            {username:{[Op.like]:`%${tag}%`}},
+                        ],
+                    }
+                });
+                for(let j=0;j<user.length;j++){usernameList.push(user[j]['username']);}
+            }
+            galleryidList = uniqueElementArray(galleryidList);
+            gardenidList = uniqueElementArray(gardenidList);
+            usernameList = uniqueElementArray(usernameList);
+            for(let i=0;i<galleryidList.length;i++){
+                let data = await Gallery.findOne({where:{id:galleryidList[i]}})
+                result.artwork.push(data);
+            }
+            for(let i=0;i<gardenidList.length;i++){
+                let data = await Garden.findOne({where:{id:gardenidList[i]}})
+                result.plantpot.push(data);
+            }
+            for(let i=0;i<usernameList.length;i++){
+                let data = await User.findOne({where:{username:usernameList[i]}})
+                result.user.push(data);
+            }
+            res.send(result);
         })();
     });
     // POST
