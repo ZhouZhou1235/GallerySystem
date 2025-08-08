@@ -1309,7 +1309,7 @@ export function loadMachineController(machine=express()){
                         {where:{username:username}},
                         { transaction:t },
                     );
-                    await imageCompressToSave(backimage,savepath);
+                    await imageCompressToSave(backimage,savepath,config.FILE_imageResizeNum*4);
                     if(oldFilename){fs.unlinkSync(config.FILE_fileHub.backimage+oldFilename);}
                 });
             }
