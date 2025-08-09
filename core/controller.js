@@ -10,6 +10,7 @@ import { sendAMail } from './mailer.js';
 import fs from 'fs';
 import { console } from 'inspector';
 import { Op } from 'sequelize';
+import { GArea } from './ConstVars.js';
 
 // 访问规则表
 const routeTable = {
@@ -1628,7 +1629,7 @@ export function loadMachineController(machine=express()){
                     if(file){
                         filename = commentid+'.'+getExtension(file.name);
                         let savepath = config.FILE_fileHub.garden+filename;
-                        let ok = await imageCompressToSave(file,savepath,512);
+                        let ok = await imageCompressToSave(file,savepath,GArea.FILE_imageResizeNum*4);
                         if(!ok){res.send(0);return;}
                     }
                     sqllize.transaction(async (t)=>{
