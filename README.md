@@ -32,9 +32,6 @@
 | GET  | /core/getPlantpot            | id: 盆栽ID               | 盆栽详情对象           | 获取单个盆栽完整信息     |
 | GET  | /core/getUserWatch           | username                 | {watchers, following}  | 获取用户社交关系         |
 | GET  | /core/searchPinkCandy        | searchtext: 关键词       | {artworks,plantpots,users} | 全站搜索               |
-
-## 辅助接口
 | GET  | /core/getNoticenum           | username                | 未读通知数            | 获取消息提醒数量         |
 | GET  | /core/getTrendnum            | username                | 未读动态数            | 获取动态更新数量         |
 
-> 注：所有接口均无需认证，方括号[]表示可选参数
