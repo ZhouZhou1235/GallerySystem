@@ -994,7 +994,7 @@ export function loadMachineController(machine=express()){
                 result.plantpot.push(data);
             }
             for(let i=0;i<usernameList.length;i++){
-                let data = await User.findOne({where:{username:usernameList[i]}})
+                let data = await User.findOne({where:{username:usernameList[i]},attributes:{exclude:['password']}})
                 result.user.push(data);
             }
             res.send(result);
